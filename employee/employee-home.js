@@ -1,398 +1,214 @@
-// Employee Home Page JavaScript
+// Employee Home Page JavaScript (متوافق مع /api/employee/*)
 
-// Configuration
-const API_BASE_URL = '../backend';
+// =================== Configuration ===================
+const API_BASE_URL = 'http://127.0.0.1:3001/api';
 let currentUser = null;
 
-// DOM Elements
+// =================== DOM Elements ===================
 const elements = {
-    userName: document.getElementById('userName'),
-    notificationIcon: document.getElementById('notificationIcon'),
-    notificationBadge: document.getElementById('notificationBadge'),
-    notificationsPanel: document.getElementById('notificationsPanel'),
-    notificationsList: document.getElementById('notificationsList'),
-    closeNotifications: document.getElementById('closeNotifications'),
-    loadingOverlay: document.getElementById('loadingOverlay'),
-    errorModal: document.getElementById('errorModal'),
-    errorMessage: document.getElementById('errorMessage'),
-    closeErrorModal: document.getElementById('closeErrorModal'),
-    closeErrorBtn: document.getElementById('closeErrorBtn'),
-    
-    // Stats
-    totalComplaints: document.getElementById('totalComplaints'),
-    pendingComplaints: document.getElementById('pendingComplaints'),
-    completedComplaints: document.getElementById('completedComplaints'),
-    unreadNotifications: document.getElementById('unreadNotifications'),
-    
-    // Recent complaints
-    recentComplaintsList: document.getElementById('recentComplaintsList'),
-    
-    // Action buttons
-    newComplaintBtn: document.getElementById('newComplaintBtn'),
-    viewComplaintsBtn: document.getElementById('viewComplaintsBtn'),
-    newComplaintCard: document.getElementById('newComplaintCard'),
-    myComplaintsCard: document.getElementById('myComplaintsCard'),
-    assignedComplaintsCard: document.getElementById('assignedComplaintsCard'),
-    notificationsCard: document.getElementById('notificationsCard'),
-    viewAllComplaints: document.getElementById('viewAllComplaints'),
-    
-    // Profile
-    profileLink: document.getElementById('profileLink'),
-    logoutBtn: document.getElementById('logoutBtn')
+  loadingOverlay: document.getElementById('loadingOverlay'),
+  errorModal: document.getElementById('errorModal'),
+  errorMessage: document.getElementById('errorMessage'),
+  closeErrorModal: document.getElementById('closeErrorModal'),
+  closeErrorBtn: document.getElementById('closeErrorBtn'),
+
+  // بطاقات الأرقام
+  newComplaintsCount: document.getElementById('newComplaintsCount'),
+  myComplaintsCount: document.getElementById('myComplaintsCount'),
+  assignedComplaintsCount: document.getElementById('assignedComplaintsCount'),
+
+  totalComplaints: document.getElementById('totalComplaints'),
+  pendingComplaints: document.getElementById('pendingComplaints'),
+  completedComplaints: document.getElementById('completedComplaints'),
+  urgentComplaints: document.getElementById('urgentComplaints'),
+
+  // سجلات النشاط
+  activitySection: document.getElementById('activitySection'),
+  activityLogsList: document.getElementById('activityLogsList'),
+
+  // اللغة
+  langToggle: document.getElementById('langToggle'),
+  langText: document.getElementById('langText'),
 };
 
-// Utility Functions
-const showLoading = () => {
-    elements.loadingOverlay.classList.add('show');
-};
-
-const hideLoading = () => {
-    elements.loadingOverlay.classList.remove('show');
-};
+// =================== Utils ===================
+const showLoading = () => elements.loadingOverlay?.classList.add('show');
+const hideLoading = () => elements.loadingOverlay?.classList.remove('show');
 
 const showError = (message) => {
-    elements.errorMessage.textContent = message;
-    elements.errorModal.classList.add('show');
+  if (elements.errorMessage) elements.errorMessage.textContent = message || 'حدث خطأ ما';
+  elements.errorModal?.classList.add('show');
 };
-
-const hideError = () => {
-    elements.errorModal.classList.remove('show');
-};
+const hideError = () => elements.errorModal?.classList.remove('show');
 
 const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ar-SA', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+  const date = new Date(dateString);
+  return date.toLocaleDateString('ar-SA', {
+    year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
 };
 
-const getStatusClass = (status) => {
-    const statusClasses = {
-        'مفتوحة/جديدة': 'status-open',
-        'قيد المعالجة': 'status-pending',
-        'معلقة': 'status-pending',
-        'مكتملة': 'status-completed',
-        'مغلقة': 'status-completed'
-    };
-    return statusClasses[status] || 'status-open';
+// =================== API Helper ===================
+const authHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
 };
 
-// API Functions
 const makeRequest = async (url, options = {}) => {
-    const token = localStorage.getItem('token');
-    
-    const defaultOptions = {
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': token ? `Bearer ${token}` : ''
-        }
-    };
-
-    const mergedOptions = {
-        ...defaultOptions,
-        ...options,
-        headers: {
-            ...defaultOptions.headers,
-            ...options.headers
-        }
-    };
-
-    try {
-        const response = await fetch(`${API_BASE_URL}${url}`, mergedOptions);
-        
-        if (!response.ok) {
-            if (response.status === 401) {
-                // Unauthorized - redirect to login
-                localStorage.removeItem('token');
-                window.location.href = '../login/login.html';
-                return;
-            }
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        return await response.json();
-    } catch (error) {
-        console.error('API Request Error:', error);
-        throw error;
+  const res = await fetch(`${API_BASE_URL}${url}`, {
+    headers: { ...authHeaders(), ...(options.headers || {}) },
+    ...options
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '../login/login.html';
+      return;
     }
+    const text = await res.text().catch(()=> '');
+    throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ''}`);
+  }
+  return res.json();
 };
 
-// Load user profile
+// =================== Loaders ===================
+
+/** 1) بيانات المستخدم: /api/employee/profile */
 const loadUserProfile = async () => {
-    try {
-        const response = await makeRequest('/employee/profile');
-        if (response.success) {
-            currentUser = response.data;
-            elements.userName.textContent = currentUser.FullName;
-            return currentUser;
-        }
-    } catch (error) {
-        console.error('Error loading user profile:', error);
-        showError('حدث خطأ في تحميل معلومات المستخدم');
-    }
+  const response = await makeRequest('/employee/profile');
+  if (!response?.success) throw new Error('profile_failed');
+  currentUser = response.data;
+
+  const nameEl = document.getElementById('userName');
+  if (nameEl) nameEl.textContent = currentUser.FullName || 'المستخدم';
+
+  localStorage.setItem('employeeDepartmentID', currentUser.DepartmentID || '');
+  localStorage.setItem('employeeNationalID', currentUser.NationalID || '');
+
+  return currentUser;
 };
 
-// Load statistics
+/** 2) إحصائيات الشكاوى: /api/employee/complaints */
 const loadStatistics = async () => {
-    try {
-        const response = await makeRequest('/employee/complaints?limit=1000');
-        if (response.success) {
-            const complaints = response.data.complaints;
-            
-            // Calculate statistics
-            const totalCount = complaints.length;
-            const pendingCount = complaints.filter(c => 
-                c.Status === 'قيد المعالجة' || c.Status === 'معلقة'
-            ).length;
-            const completedCount = complaints.filter(c => 
-                c.Status === 'مكتملة' || c.Status === 'مغلقة'
-            ).length;
-            
-            // Update UI
-            elements.totalComplaints.textContent = totalCount;
-            elements.pendingComplaints.textContent = pendingCount;
-            elements.completedComplaints.textContent = completedCount;
-        }
-    } catch (error) {
-        console.error('Error loading statistics:', error);
+  const resp = await makeRequest('/employee/complaints?limit=100');
+  const complaints = resp?.data?.complaints || [];
+
+  const totalCount = complaints.length;
+  const pendingCount = complaints.filter(c =>
+    ['قيد المعالجة','معلقة','In Progress','Pending'].includes(c.Status)
+  ).length;
+  const completedCount = complaints.filter(c =>
+    ['مكتملة','مغلقة','Done','Closed','Resolved','تم الحل'].includes(c.Status)
+  ).length;
+  const urgentCount = complaints.filter(c =>
+    ['عاجل','عالية','High','Urgent'].includes(c.Priority)
+  ).length;
+
+  const myComplaintsCount = complaints.filter(c => c.CreatedBy === currentUser.EmployeeID).length;
+  const assignedComplaintsCount = complaints.filter(c => c.AssignedTo === currentUser.EmployeeID).length;
+
+  const today = new Date().toISOString().split('T')[0];
+  const newComplaintsCount = complaints.filter(c => String(c.CreatedAt || '').startsWith(today)).length;
+
+  if (elements.totalComplaints) elements.totalComplaints.textContent = totalCount;
+  if (elements.pendingComplaints) elements.pendingComplaints.textContent = pendingCount;
+  if (elements.completedComplaints) elements.completedComplaints.textContent = completedCount;
+  if (elements.urgentComplaints) elements.urgentComplaints.textContent = urgentCount;
+
+  if (elements.newComplaintsCount) elements.newComplaintsCount.textContent = newComplaintsCount;
+  if (elements.myComplaintsCount) elements.myComplaintsCount.textContent = myComplaintsCount;
+  if (elements.assignedComplaintsCount) elements.assignedComplaintsCount.textContent = assignedComplaintsCount;
+};
+
+/** 3) سجلات النشاط: /api/employee/activity-logs */
+const loadActivityLogs = async () => {
+  if (!elements.activityLogsList) return;
+  try {
+    const resp = await makeRequest('/employee/activity-logs?limit=10');
+    const logs = (resp?.data?.logs) || [];
+
+    const list = elements.activityLogsList;
+    list.innerHTML = '';
+
+    if (!logs.length) {
+      list.innerHTML = `
+        <div class="activity-item">
+          <div class="activity-cell" style="grid-column:1 / -1; text-align:center; color:#666;">
+            لا توجد سجلات نشاط
+          </div>
+        </div>`;
+      return;
     }
-};
 
-// Load notifications
-const loadNotifications = async () => {
-    try {
-        const response = await makeRequest('/employee/notifications?limit=5');
-        if (response.success) {
-            const { notifications, unreadCount } = response.data;
-            
-            // Update notification badge
-            elements.notificationBadge.textContent = unreadCount;
-            elements.notificationBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
-            elements.unreadNotifications.textContent = unreadCount;
-            
-            // Update notifications list
-            elements.notificationsList.innerHTML = '';
-            
-            if (notifications.length === 0) {
-                elements.notificationsList.innerHTML = `
-                    <div class="notification-item">
-                        <p style="text-align: center; color: #666;">لا توجد إشعارات</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            notifications.forEach(notification => {
-                const notificationElement = document.createElement('div');
-                notificationElement.className = `notification-item ${!notification.IsRead ? 'unread' : ''}`;
-                notificationElement.innerHTML = `
-                    <div class="notification-title">${notification.Title || 'إشعار'}</div>
-                    <div class="notification-message">${notification.Message}</div>
-                    <div class="notification-time">${formatDate(notification.CreatedAt)}</div>
-                `;
-                
-                // Add click handler to mark as read
-                notificationElement.addEventListener('click', () => {
-                    if (!notification.IsRead) {
-                        markNotificationAsRead(notification.NotificationID);
-                    }
-                    
-                    // If related to complaint, navigate to complaint details
-                    if (notification.ComplaintID) {
-                        window.location.href = `employee-complaint-details.html?id=${notification.ComplaintID}`;
-                    }
-                });
-                
-                elements.notificationsList.appendChild(notificationElement);
-            });
-        }
-    } catch (error) {
-        console.error('Error loading notifications:', error);
+    logs.forEach(log => {
+      const item = document.createElement('div');
+      item.className = 'activity-item';
+      item.innerHTML = `
+        <div class="activity-cell">${formatDate(log.CreatedAt || new Date())}</div>
+        <div class="activity-cell">${log.Username || '-'}</div>
+        <div class="activity-cell">${log.ActivityType || log.ActionType || '-'}</div>
+        <div class="activity-cell">${log.Description || log.ActionDescription || '-'}</div>
+      `;
+      list.appendChild(item);
+    });
+  } catch (e) {
+    if (String(e.message).includes('HTTP 403') && elements.activitySection) {
+      elements.activitySection.style.display = 'none';
+      return;
     }
+    throw e;
+  }
 };
 
-// Mark notification as read
-const markNotificationAsRead = async (notificationId) => {
-    try {
-        await makeRequest(`/employee/notifications/${notificationId}/read`, {
-            method: 'PUT'
-        });
-        // Reload notifications to update the UI
-        loadNotifications();
-    } catch (error) {
-        console.error('Error marking notification as read:', error);
+// =================== Language ===================
+const initLanguageSwitcher = () => {
+  elements.langToggle?.addEventListener('click', () => {
+    const currentLang = localStorage.getItem('lang') || 'ar';
+    const newLang = currentLang === 'ar' ? 'en' : 'ar';
+    localStorage.setItem('lang', newLang);
+    if (elements.langText) {
+      elements.langText.textContent = newLang === 'ar' ? 'English | العربية' : 'العربية | English';
     }
+    document.documentElement.lang = newLang;
+    document.body.dir = newLang === 'ar' ? 'rtl' : 'ltr';
+    document.body.className = `lang-${newLang}`;
+  });
 };
 
-// Load recent complaints
-const loadRecentComplaints = async () => {
-    try {
-        const response = await makeRequest('/employee/complaints?limit=5');
-        if (response.success) {
-            const complaints = response.data.complaints;
-            
-            elements.recentComplaintsList.innerHTML = '';
-            
-            if (complaints.length === 0) {
-                elements.recentComplaintsList.innerHTML = `
-                    <div class="complaint-item">
-                        <p style="text-align: center; color: #666;">لا توجد شكاوى</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            complaints.forEach(complaint => {
-                const complaintElement = document.createElement('div');
-                complaintElement.className = 'complaint-item';
-                complaintElement.innerHTML = `
-                    <div class="complaint-header">
-                        <div>
-                            <div class="complaint-title">${complaint.Title}</div>
-                            <div class="complaint-date">${formatDate(complaint.CreatedAt)}</div>
-                        </div>
-                        <span class="complaint-status ${getStatusClass(complaint.Status)}">
-                            ${complaint.Status}
-                        </span>
-                    </div>
-                    <div class="complaint-description">
-                        ${complaint.Description.length > 100 ? 
-                          complaint.Description.substring(0, 100) + '...' : 
-                          complaint.Description}
-                    </div>
-                    <div class="complaint-meta">
-                        <span>الفئة: ${complaint.Category}</span>
-                        <span>الردود: ${complaint.ResponseCount || 0}</span>
-                    </div>
-                `;
-                
-                // Add click handler to view complaint details
-                complaintElement.addEventListener('click', () => {
-                    window.location.href = `employee-complaint-details.html?id=${complaint.ComplaintID}`;
-                });
-                
-                elements.recentComplaintsList.appendChild(complaintElement);
-            });
-        }
-    } catch (error) {
-        console.error('Error loading recent complaints:', error);
-    }
-};
-
-// Event Listeners
-const initEventListeners = () => {
-    // Notification panel
-    elements.notificationIcon.addEventListener('click', () => {
-        elements.notificationsPanel.classList.toggle('open');
-    });
-    
-    elements.closeNotifications.addEventListener('click', () => {
-        elements.notificationsPanel.classList.remove('open');
-    });
-    
-    // Close notifications when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!elements.notificationsPanel.contains(e.target) && 
-            !elements.notificationIcon.contains(e.target)) {
-            elements.notificationsPanel.classList.remove('open');
-        }
-    });
-    
-    // Error modal
-    elements.closeErrorModal.addEventListener('click', hideError);
-    elements.closeErrorBtn.addEventListener('click', hideError);
-    
-    // Navigation buttons
-    elements.newComplaintBtn.addEventListener('click', () => {
-        window.location.href = 'employee-newcomplaint.html';
-    });
-    
-    elements.viewComplaintsBtn.addEventListener('click', () => {
-        window.location.href = 'employee-followup.html';
-    });
-    
-    elements.newComplaintCard.addEventListener('click', () => {
-        window.location.href = 'employee-newcomplaint.html';
-    });
-    
-    elements.myComplaintsCard.addEventListener('click', () => {
-        window.location.href = 'employee-followup.html?filter=my';
-    });
-    
-    elements.assignedComplaintsCard.addEventListener('click', () => {
-        window.location.href = 'employee-followup.html?filter=assigned';
-    });
-    
-    elements.notificationsCard.addEventListener('click', () => {
-        elements.notificationsPanel.classList.add('open');
-    });
-    
-    elements.viewAllComplaints.addEventListener('click', (e) => {
-        e.preventDefault();
-        window.location.href = 'employee-followup.html';
-    });
-    
-    // Profile and logout
-    elements.profileLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        window.location.href = 'employee-profile.html';
-    });
-    
-    elements.logoutBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        logout();
-    });
-};
-
-// Logout function
-const logout = () => {
-    if (confirm('هل أنت متأكد من تسجيل الخروج؟')) {
-        localStorage.removeItem('token');
-        window.location.href = '../login/login.html';
-    }
-};
-
-// Initialize page
+// =================== Init ===================
 const initPage = async () => {
-    // Check if user is logged in
-    const token = localStorage.getItem('token');
-    if (!token) {
-        window.location.href = '../login/login.html';
-        return;
+  const token = localStorage.getItem('token');
+  if (!token) {
+    window.location.href = '../login/login.html';
+    return;
+  }
+
+  elements.closeErrorModal?.addEventListener('click', hideError);
+  elements.closeErrorBtn?.addEventListener('click', hideError);
+
+  showLoading();
+  try {
+    await loadUserProfile();
+    await Promise.all([loadStatistics(), loadActivityLogs()]);
+    initLanguageSwitcher();
+  } catch (err) {
+    console.error('Error initializing page:', err);
+    if (String(err.message).includes('HTTP 404')) {
+      showError('المسار المطلوب غير موجود (404).');
+    } else if (String(err.message).includes('HTTP 401')) {
+      showError('انتهت الجلسة. يرجى تسجيل الدخول من جديد.');
+    } else if (String(err.message).includes('HTTP 403')) {
+      showError('لا تملك صلاحية الوصول (403).');
+    } else {
+      showError('حدث خطأ في تحميل الصفحة.');
     }
-    
-    showLoading();
-    
-    try {
-        // Load all data
-        await Promise.all([
-            loadUserProfile(),
-            loadStatistics(),
-            loadNotifications(),
-            loadRecentComplaints()
-        ]);
-        
-        // Initialize event listeners
-        initEventListeners();
-        
-    } catch (error) {
-        console.error('Error initializing page:', error);
-        showError('حدث خطأ في تحميل الصفحة');
-    } finally {
-        hideLoading();
-    }
+  } finally {
+    hideLoading();
+  }
 };
 
-// Auto-refresh notifications every 30 seconds
-setInterval(() => {
-    if (currentUser) {
-        loadNotifications();
-    }
-}, 30000);
-
-// Initialize when page loads
 document.addEventListener('DOMContentLoaded', initPage);

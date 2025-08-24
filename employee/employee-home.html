@@ -8,162 +8,143 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <!-- Header -->
+        <!-- Header -->
     <header class="header">
         <div class="header-content">
-            <div class="header-title" data-ar="عُــــــونَك" data-en="AOUNAK">عُــــــونَك</div>
-            <img src="../icon/hospital-logo.png" alt="شعار المستشفى" class="header-logo">
+            <!-- الجانب الأيسر: شعار عونك -->
+            <div class="header-left">
+                <div class="header-title" data-ar="عُــــــونَك - موظف" data-en="AOUNAK - Employee">عُــــــونَك - موظف</div>
+            </div>
+            
+            <!-- الوسط: شعار المستشفى -->
+            <div class="header-center">
+                <img src="../icon/hospital-logo.png" alt="شعار المستشفى" class="header-logo">
+            </div>
+            
+            <!-- الجانب الأيمن: الملف الشخصي وزر اللغة -->
             <div class="header-right">
-                <div class="notifications">
-                    <i class="fas fa-bell" id="notificationIcon"></i>
-                    <span class="notification-badge" id="notificationBadge">0</span>
-                </div>
-                <div class="user-profile">
-                    <img src="../icon/person.png" alt="صورة المستخدم" id="userAvatar">
-                    <span id="userName">اسم المستخدم</span>
-                    <div class="dropdown">
-                        <button class="dropdown-btn">
-                            <i class="fas fa-chevron-down"></i>
-                        </button>
-                        <div class="dropdown-content">
-                            <a href="#" id="profileLink">
-                                <i class="fas fa-user"></i>
-                                الملف الشخصي
-                            </a>
-                            <a href="#" id="logoutBtn">
-                                <i class="fas fa-sign-out-alt"></i>
-                                تسجيل الخروج
-                            </a>
-                        </div>
-                    </div>
-                </div>
+                <!-- زر الملف الشخصي -->
+                <a href="../login/profile.html" class="profile-link" id="profileLink">
+                    <img src="../icon/person.png" alt="profile" class="profile-icon-small">
+                    <span>الملف الشخصي</span>
+                </a>
+                
+                <!-- زر اللغة -->
+                <button id="langToggle" class="lang-toggle-btn">
+                    <img src="../icon/lang.png" alt="language" class="lang-icon" />
+                    <span id="langText">العربية | English</span>
+                </button>
             </div>
         </div>
     </header>
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Welcome Section -->
-        <section class="welcome-section">
-            <div class="welcome-card">
-                <div class="welcome-text">
-                    <h2>مرحباً بك في نظام إدارة الشكاوى</h2>
-                    <p>يمكنك من خلال هذا النظام تقديم الشكاوى ومتابعتها والرد عليها</p>
-                </div>
-                <div class="welcome-actions">
-                    <button class="btn btn-primary" id="newComplaintBtn">
-                        <i class="fas fa-plus"></i>
-                        تقديم شكوى جديدة
-                    </button>
-                    <button class="btn btn-secondary" id="viewComplaintsBtn">
-                        <i class="fas fa-list"></i>
-                        متابعة الشكاوى
-                    </button>
+        <div class="cards-container">
+            <!-- Card 1: تقديم شكوى جديدة -->
+            <div class="card" id="newComplaintCard">
+                <div class="card-icon"><i class="fas fa-plus"></i></div>
+                <div class="card-content">
+                    <h3>تقديم شكوى جديدة</h3>
+                    <p>قم بتسجيل شكوى جديدة</p>
+                    <div class="card-stats">
+                        <div class="stat-item">
+                            <span class="stat-number" id="newComplaintsCount">0</span>
+                            <span class="stat-label">شكاوى جديدة</span>
+                        </div>
+                    </div>
+                    <button class="card-btn" onclick="window.location.href='employee-newcomplaint.html'">تقديم شكوى</button>
                 </div>
             </div>
-        </section>
 
-        <!-- Quick Stats -->
-        <section class="stats-section">
+            <!-- Card 2: متابعة الشكاوى -->
+            <div class="card" id="followupComplaintsCard">
+                <div class="card-icon"><i class="fas fa-search"></i></div>
+                <div class="card-content">
+                    <h3>متابعة الشكاوى</h3>
+                    <p>تتبع حالة شكاويك المقدمة</p>
+                    <div class="card-stats">
+                        <div class="stat-item">
+                            <span class="stat-number" id="myComplaintsCount">0</span>
+                            <span class="stat-label">شكاوىي</span>
+                        </div>
+                    </div>
+                    <button class="card-btn" onclick="window.location.href='employee-followup.html?filter=my'">متابعة الشكاوى</button>
+                </div>
+            </div>
+
+            <!-- Card 3: الشكاوى المسندة لي -->
+            <div class="card" id="assignedComplaintsCard">
+                <div class="card-icon"><i class="fas fa-tasks"></i></div>
+                <div class="card-content">
+                    <h3>الشكاوى المسندة لي</h3>
+                    <p>الشكاوى التي تم إسنادها لك للمعالجة</p>
+                    <div class="card-stats">
+                        <div class="stat-item">
+                            <span class="stat-number" id="assignedComplaintsCount">0</span>
+                            <span class="stat-label">مسندة لي</span>
+                        </div>
+                    </div>
+                    <button class="card-btn" onclick="window.location.href='employee-followup.html?filter=assigned'">عرض المسندة</button>
+                </div>
+            </div>
+
+
+        </div>
+
+        <!-- إحصائيات الشكاوى -->
+        <section class="statistics-section">
+            <h2>إحصائيات الشكاوى</h2>
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-icon">
-                        <i class="fas fa-file-alt"></i>
-                    </div>
+                    <div class="stat-icon"><i class="fas fa-file-alt"></i></div>
                     <div class="stat-content">
                         <h3 id="totalComplaints">0</h3>
                         <p>إجمالي الشكاوى</p>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon">
-                        <i class="fas fa-clock"></i>
-                    </div>
+                    <div class="stat-icon"><i class="fas fa-clock"></i></div>
                     <div class="stat-content">
                         <h3 id="pendingComplaints">0</h3>
                         <p>قيد المعالجة</p>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
+                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
                     <div class="stat-content">
                         <h3 id="completedComplaints">0</h3>
                         <p>مكتملة</p>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon">
-                        <i class="fas fa-bell"></i>
-                    </div>
+                    <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
                     <div class="stat-content">
-                        <h3 id="unreadNotifications">0</h3>
-                        <p>إشعارات جديدة</p>
+                        <h3 id="urgentComplaints">0</h3>
+                        <p>عاجلة</p>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Recent Complaints -->
-        <section class="recent-complaints">
-            <div class="section-header">
-                <h2>آخر الشكاوى</h2>
-                <a href="#" id="viewAllComplaints" class="view-all">عرض الكل</a>
-            </div>
-            <div class="complaints-list" id="recentComplaintsList">
-                <!-- سيتم ملء هذا القسم ديناميكياً -->
-            </div>
-        </section>
-
-        <!-- Quick Actions -->
-        <section class="quick-actions">
-            <h2>إجراءات سريعة</h2>
-            <div class="actions-grid">
-                <div class="action-card" id="newComplaintCard">
-                    <div class="action-icon">
-                        <i class="fas fa-plus-circle"></i>
-                    </div>
-                    <h3>شكوى جديدة</h3>
-                    <p>تقديم شكوى جديدة</p>
+        <!-- آخر 10 سجلات نشاط -->
+        <section class="activity-logs-section">
+            <h2>آخر 10 سجلات نشاط</h2>
+            <div class="activity-table">
+                <div class="table-header">
+                    <div class="header-cell">الوقت</div>
+                    <div class="header-cell">المستخدم</div>
+                    <div class="header-cell">النوع</div>
+                    <div class="header-cell">الوصف</div>
                 </div>
-                <div class="action-card" id="myComplaintsCard">
-                    <div class="action-icon">
-                        <i class="fas fa-list-alt"></i>
-                    </div>
-                    <h3>شكاوىي</h3>
-                    <p>عرض شكاوىي</p>
-                </div>
-                <div class="action-card" id="assignedComplaintsCard">
-                    <div class="action-icon">
-                        <i class="fas fa-tasks"></i>
-                    </div>
-                    <h3>المسندة لي</h3>
-                    <p>الشكاوى المسندة لي</p>
-                </div>
-                <div class="action-card" id="notificationsCard">
-                    <div class="action-icon">
-                        <i class="fas fa-bell"></i>
-                    </div>
-                    <h3>الإشعارات</h3>
-                    <p>عرض الإشعارات</p>
+                <div class="table-body" id="activityLogsList">
+                    <!-- سيتم ملء هذا القسم ديناميكياً -->
                 </div>
             </div>
         </section>
     </main>
 
-    <!-- Notifications Panel -->
-    <div class="notifications-panel" id="notificationsPanel">
-        <div class="notifications-header">
-            <h3>الإشعارات</h3>
-            <button class="close-notifications" id="closeNotifications">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="notifications-list" id="notificationsList">
-            <!-- سيتم ملء هذا القسم ديناميكياً -->
-        </div>
-    </div>
+
 
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">

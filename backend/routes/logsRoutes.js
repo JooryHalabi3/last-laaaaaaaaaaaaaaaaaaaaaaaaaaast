@@ -1,38 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../config/database'); // <-- تأكدي أن الملف الصحيح
+const logsController = require('../controllers/logsController');
 
-// ✅ هذي نسخة مبسطة بدون checkUserPermissions عشان تتأكدي تشتغل
-router.get('/latest', async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit || '10', 10), 100);
-    const [rows] = await pool.execute(`
-      SELECT Username, ActivityType, Description, CreatedAt
-      FROM activitylogs
-      ORDER BY CreatedAt DESC
-      LIMIT ?
-    `, [limit]);
-    res.json(rows);
-  } catch (err) {
-    console.error('Error fetching latest logs:', err);
-    res.status(500).json({ success: false, message: 'Error fetching logs' });
-  }
-});
+// تطبيق middleware للتحقق من الصلاحيات على جميع routes
+router.use(logsController.checkUserPermissions);
+router.use(logsController.checkAdminPermissions);
 
-router.get('/', async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit || '10', 10), 100);
-    const [rows] = await pool.execute(`
-      SELECT Username, ActivityType, Description, CreatedAt
-      FROM activitylogs
-      ORDER BY CreatedAt DESC
-      LIMIT ?
-    `, [limit]);
-    res.json({ data: rows });
-  } catch (err) {
-    console.error('Error fetching logs:', err);
-    res.status(500).json({ success: false, message: 'Error fetching logs' });
-  }
-});
+// جلب جميع السجلات مع الفلاتر والتصفح
+router.get('/', logsController.getAllLogs);
 
-module.exports = router;
+// تصدير السجلات
+router.get('/export', logsController.exportLogs);
+
+// حذف السجلات القديمة
+router.delete('/old', logsController.deleteOldLogs);
+
+// حذف سجل محدد
+router.delete('/:logId', logsController.deleteLog);
+
+module.exports = router; 
