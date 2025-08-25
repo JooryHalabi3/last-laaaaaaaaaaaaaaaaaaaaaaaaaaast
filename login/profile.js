@@ -254,11 +254,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(roleId === 1){
       window.location.href = '/superadmin/superadmin-home.html';
     } else if(roleId === 2){
-      window.location.href = '/home/employee-home.html';
+      window.location.href = '/employee/employee-home.html';
     } else if(roleId === 3){
       window.location.href = '/dept-admin/dept-admin.html';
     } else {
       window.location.href = '/login/home.html'; // احتياطي
+
+     
     }
   });
 

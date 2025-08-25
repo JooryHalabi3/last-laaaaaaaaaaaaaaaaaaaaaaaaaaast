@@ -75,7 +75,7 @@
       const roleId = Number(user.RoleID || user.roleId);
       if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
       if (roleId === 2) return '/employee/employee-home.html';   // موظف
-      if (roleId === 3) return '/home/admin-home.html';      // أدمن
+      if (roleId === 3) return '/dept-admin/dept-admin.html';     // أدمن
       return '/home/home.html'; // احتياطي
     }
 

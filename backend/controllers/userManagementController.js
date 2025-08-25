@@ -1,5 +1,7 @@
 // controllers/userManagementController.js
 const pool = require('../config/database');
+const jwt = require('jsonwebtoken');
+
 
 // GET /api/admin/users?page=1&limit=10&search=&roleId=&deptId=
 exports.listUsers = async (req, res) => {
@@ -115,11 +117,13 @@ exports.deleteUser = async (req, res) => {
 };
 
 // POST /api/admin/users/impersonate/:id  { reason? }
+
 exports.impersonateUser = async (req, res) => {
   try {
     if (req.user.RoleID !== 1) {
       return res.status(403).json({ success: false, message: 'السماح للسوبر أدمن فقط' });
     }
+
     const targetId = parseInt(req.params.id, 10);
     const reason = (req.body?.reason || '').slice(0, 500);
 
@@ -128,16 +132,50 @@ exports.impersonateUser = async (req, res) => {
       [req.user.EmployeeID, targetId, reason || null]
     );
 
-    // خزّن في السيشن/الذاكرة أنك تتقمص هذا المستخدم (لو عندك جلسات)
+    // اجلب بيانات الهدف (موظف أو أدمن)
+    const [[target]] = await pool.query(
+      `SELECT EmployeeID, FullName, Username, Email, RoleID, DepartmentID
+       FROM employees WHERE EmployeeID = ? LIMIT 1`,
+      [targetId]
+    );
+    if (!target) {
+      return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    }
+
+    // (اختياري) منع التقمص إلى سوبر أدمن آخر
+    if (Number(target.RoleID) === 1) {
+      return res.status(403).json({ success:false, message:'لا يمكن التقمص إلى Super Admin' });
+    }
+
+    // جهّز توكن بهوية الهدف
+    const token = jwt.sign(
+      {
+        EmployeeID: target.EmployeeID,
+        Username: target.Username,
+        RoleID: target.RoleID,
+        DepartmentID: target.DepartmentID
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '2h' }
+    );
+
+    // (لو تستخدم سيشن، ممكن تترك السطرين الحاليين كما هم)
     req.session = req.session || {};
     req.session.impersonatedUser = targetId;
 
-    res.json({ success: true, message: 'تم تفعيل السويتش يوزر', impersonating: targetId });
+    return res.json({
+      success: true,
+      message: 'تم تفعيل السويتش يوزر',
+      impersonating: targetId,
+      token,
+      user: target
+    });
   } catch (err) {
     console.error('impersonateUser error:', err);
     res.status(500).json({ success: false, message: 'Error impersonating user', error: err.message });
   }
 };
+
 
 // POST /api/admin/users/impersonate/end
 exports.endImpersonation = async (req, res) => {

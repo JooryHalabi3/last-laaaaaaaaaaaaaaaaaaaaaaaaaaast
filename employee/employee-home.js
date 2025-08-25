@@ -3,6 +3,52 @@
 // =================== Configuration ===================
 const API_BASE_URL = 'http://127.0.0.1:3001/api';
 let currentUser = null;
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const rootToken = localStorage.getItem('rootToken');
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+    // يظهر الزر فقط إذا كان فيه rootToken (يعني السوبر أدمن متقمص حساب)
+    // وأيضًا فقط إذا الدور الحالي مو SUPER_ADMIN
+    if (rootToken && user?.RoleID !== 1) {
+      showReturnToSuperAdminButton();
+    }
+  } catch (err) {
+    console.error('Error checking impersonation state:', err);
+  }
+});
+
+function showReturnToSuperAdminButton() {
+  const btn = document.createElement('button');
+  btn.textContent = '🔙 العودة لحساب السوبر';
+  btn.style.position = 'fixed';
+  btn.style.top = '10px';
+  btn.style.left = '10px';
+  btn.style.padding = '8px 12px';
+  btn.style.background = '#dc2626';
+  btn.style.color = '#fff';
+  btn.style.border = 'none';
+  btn.style.borderRadius = '6px';
+  btn.style.cursor = 'pointer';
+  btn.style.zIndex = '9999';
+
+  btn.onclick = () => {
+    const rootToken = localStorage.getItem('rootToken');
+    const rootUser = localStorage.getItem('rootUser');
+    if (rootToken && rootUser) {
+      // رجّع بيانات السوبر
+      localStorage.setItem('token', rootToken);
+      localStorage.setItem('user', rootUser);
+      localStorage.removeItem('rootToken');
+      localStorage.removeItem('rootUser');
+
+      window.location.href = '/superadmin/superadmin-home.html';
+    }
+  };
+
+  document.body.appendChild(btn);
+}
+
 
 // =================== DOM Elements ===================
 const elements = {

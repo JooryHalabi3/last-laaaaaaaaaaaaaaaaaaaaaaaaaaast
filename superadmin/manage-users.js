@@ -11,6 +11,14 @@ let allDepartments = [];   // for department filter
 
 const API_BASE_URL = 'http://localhost:3001/api';
 
+function homePathForRole(roleId) {
+  if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
+  if (roleId === 2) return '/employee/employee-home.html';     // موظف
+  if (roleId === 3) return '/dept-admin/dept-admin.html';      // أدمن القسم
+  // افتراضي (لو صار شيء غير متوقع)
+  return '/login/home.html';
+}
+
 // =====================
 // Boot
 // =====================
@@ -461,24 +469,43 @@ async function submitEditForm(e) {
 // =====================
 // Impersonation & disable
 // =====================
+// Impersonate (Super Admin only): switch into target user's account, then redirect to their home page
 async function impersonate(id) {
-  if (!confirm(currentLang==='ar' ? 'الدخول على الحساب كـ سويتش؟' : 'Impersonate this user?')) return;
+  // Confirm action
+  if (!confirm(currentLang === 'ar' ? 'الدخول على الحساب كـ سويتش؟' : 'Impersonate this user?')) return;
+
   try {
-    const token = localStorage.getItem('token');
+    // Save current (super admin) identity so we can return later
+    const superToken = localStorage.getItem('token');
+    const superUser  = localStorage.getItem('user'); // keep as string
+    if (superToken) localStorage.setItem('rootToken', superToken);
+    if (superUser)  localStorage.setItem('rootUser',  superUser);
+
+    // Call backend to impersonate target user
     const res = await fetch(`${API_BASE_URL}/admin/users/${id}/impersonate`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: { Authorization: `Bearer ${superToken}` }
     });
-    const data = await safeJson(res);
-    if (!res.ok || !data?.success) throw new Error(data?.message || 'Impersonation failed');
 
-    localStorage.setItem('user', JSON.stringify(data.user));
-    alert(currentLang==='ar' ? 'تم الدخول بالنيابة' : 'Impersonation started');
-    location.href = '/login/home.html';
+    const data = await res.json();
+    if (!res.ok || !data?.success || !data?.token) {
+      throw new Error(data?.message || 'Impersonation failed');
+    }
+
+    // Replace identity with target's token + user
+    localStorage.setItem('token', data.token);
+    if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+
+    // Decide destination based on role
+    const roleId = data.user ? Number(data.user.RoleID) : parseJwtRoleId(data.token);
+    window.location.href = homePathForRole(roleId);
   } catch (e) {
-    showError(e.message || 'Impersonation failed');
+    alert(e.message || 'Impersonation failed');
   }
 }
+
+
+
 
 async function endImpersonation() {
   try {
