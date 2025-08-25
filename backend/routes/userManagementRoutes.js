@@ -11,6 +11,9 @@ router.get('/', authenticateToken, controller.listUsers);
 // إحصائيات مبسطة للواجهة (عدد الكل/حسب الأدوار)
 router.get('/stats', authenticateToken, controller.getStats);
 
+// تحديث بيانات المستخدم
+router.put('/:id', authenticateToken, controller.updateUser);
+
 // تحديث دور المستخدم
 router.put('/:id/role', authenticateToken, controller.updateUserRole);
 

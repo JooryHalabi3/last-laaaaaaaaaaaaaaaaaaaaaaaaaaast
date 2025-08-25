@@ -6,43 +6,90 @@ let complaintData = null;
 
 // تحميل بيانات الشكوى
 async function loadComplaintDetails() {
-  const selectedComplaint = localStorage.getItem("selectedComplaint");
+  let selectedComplaint = localStorage.getItem("selectedComplaint");
   
+  // إذا لم توجد بيانات، محاولة الحصول عليها من URL
   if (!selectedComplaint) {
-    alert("لا توجد بيانات شكوى متاحة");
-    goBack();
-    return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const complaintId = urlParams.get('complaint');
+    
+    if (complaintId) {
+      console.log('لا توجد بيانات في localStorage، محاولة جلبها من API باستخدام ID:', complaintId);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/complaints/details/${complaintId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
+        
+        if (data.success && data.data.complaint) {
+          const complaintToSave = {
+            ...data.data.complaint,
+            _dataSource: 'details-api',
+            _timestamp: Date.now()
+          };
+          selectedComplaint = JSON.stringify(complaintToSave);
+          localStorage.setItem("selectedComplaint", selectedComplaint);
+          console.log('تم جلب بيانات الشكوى من API بنجاح');
+        } else {
+          throw new Error('فشل في جلب بيانات الشكوى من API');
+        }
+      } catch (apiError) {
+        console.error('خطأ في جلب بيانات الشكوى من API:', apiError);
+        alert("لا توجد بيانات شكوى متاحة");
+        goBack();
+        return;
+      }
+    } else {
+      alert("لا توجد بيانات شكوى متاحة");
+      goBack();
+      return;
+    }
   }
 
   try {
     const complaintFromStorage = JSON.parse(selectedComplaint);
     console.log('بيانات الشكوى من localStorage:', complaintFromStorage);
+    console.log('مصدر البيانات:', complaintFromStorage._dataSource || 'غير محدد');
     
-    // جلب التفاصيل الكاملة من API
-    const response = await fetch(`${API_BASE_URL}/complaints/details/${complaintFromStorage.ComplaintID}`);
-    const data = await response.json();
+    // استخدام البيانات من localStorage مباشرة لتجنب التضارب
+    complaintData = complaintFromStorage;
     
-    if (data.success) {
-      complaintData = data.data.complaint;
-      console.log('بيانات الشكوى من API:', complaintData);
-      populateComplaintDetails();
-    } else {
-      // إذا فشل API، استخدم البيانات من localStorage
-      console.log('فشل API، استخدام البيانات من localStorage');
-      complaintData = complaintFromStorage;
-      populateComplaintDetails();
+    // إذا كانت البيانات ناقصة، جلب البيانات الكاملة من API
+    if (!complaintData.PatientName || !complaintData.DepartmentName) {
+      console.log('البيانات ناقصة، محاولة جلب البيانات الكاملة من API...');
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/complaints/details/${complaintData.ComplaintID}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
+        
+        if (data.success && data.data.complaint) {
+          // دمج البيانات بعناية - الحفاظ على البيانات الموجودة إذا كانت صحيحة
+          const apiData = data.data.complaint;
+          complaintData = {
+            ...apiData, // البيانات من API أولاً
+            ...complaintData, // البيانات المحلية تُعطى الأولوية
+            // التأكد من وجود المعرف الصحيح
+            ComplaintID: complaintData.ComplaintID || apiData.ComplaintID
+          };
+          console.log('تم دمج البيانات من API مع البيانات المحلية');
+          
+          // تحديث localStorage بالبيانات المدمجة
+          localStorage.setItem("selectedComplaint", JSON.stringify(complaintData));
+        }
+      } catch (apiError) {
+        console.log('فشل في جلب البيانات الإضافية من API، استكمال بالبيانات الموجودة:', apiError.message);
+      }
     }
+    
+    populateComplaintDetails();
+    
   } catch (error) {
     console.error('خطأ في تحميل بيانات الشكوى:', error);
-    // استخدم البيانات من localStorage كبديل
-    try {
-      complaintData = JSON.parse(selectedComplaint);
-      console.log('استخدام البيانات من localStorage كبديل');
-      populateComplaintDetails();
-    } catch (localError) {
-      alert("خطأ في تحميل بيانات الشكوى");
-      goBack();
-    }
+    alert("خطأ في تحميل بيانات الشكوى");
+    goBack();
   }
 }
 
@@ -122,8 +169,15 @@ function updateComplainantInfo() {
   // تحديث الاسم الكامل
   const patientNameElement = document.getElementById('patientName');
   if (patientNameElement) {
-    patientNameElement.textContent = complaintData.PatientName || 'غير محدد';
-    console.log('تم تحديث الاسم:', complaintData.PatientName);
+    // تجربة أسماء مختلفة للحقل لضمان العثور على الاسم الصحيح
+    const patientName = complaintData.PatientName || 
+                       complaintData.patientName || 
+                       complaintData.FullName ||
+                       complaintData.fullName ||
+                       'غير محدد';
+    patientNameElement.textContent = patientName;
+    console.log('اسم المريض المعروض في التفاصيل:', patientName);
+    console.log('مصدر البيانات:', complaintData._dataSource || 'غير محدد');
   }
   
   // تحديث رقم الهوية

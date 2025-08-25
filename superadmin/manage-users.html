@@ -108,14 +108,7 @@
             </select>
           </div>
 
-          <div class="filter-group">
-            <label data-ar="الحالة" data-en="Status">الحالة</label>
-            <select id="statusFilter" class="filter-input">
-              <option value="" data-ar="الكل" data-en="All">الكل</option>
-              <option value="1" data-ar="مفعّل" data-en="Active">مفعّل</option>
-              <option value="0" data-ar="مُعطّل" data-en="Inactive">مُعطّل</option>
-            </select>
-          </div>
+
 
           <div class="filter-group">
             <label data-ar="بحث" data-en="Search">بحث</label>
@@ -171,11 +164,11 @@
             <tr>
               <th>#</th>
               <th data-ar="الاسم" data-en="Name">الاسم</th>
-              <th>Username</th>
+              <th data-ar="رقم الموظف" data-en="Employee ID">رقم الموظف</th>
               <th data-ar="الإيميل" data-en="Email">الإيميل</th>
               <th data-ar="الدور" data-en="Role">الدور</th>
               <th data-ar="القسم" data-en="Department">القسم</th>
-              <th data-ar="الحالة" data-en="Status">الحالة</th>
+
               <th data-ar="إجراءات" data-en="Actions">إجراءات</th>
             </tr>
           </thead>
@@ -227,8 +220,8 @@
             <input id="editFullName" required />
           </div>
           <div class="form-group">
-            <label>Username (read-only)</label>
-            <input id="editUsername" disabled />
+            <label data-ar="رقم الموظف (للقراءة فقط)" data-en="Employee ID (read-only)">رقم الموظف (للقراءة فقط)</label>
+            <input id="editEmployeeID" disabled />
           </div>
           <div class="form-group">
             <label>Email</label>
@@ -246,13 +239,7 @@
             <label>DepartmentID</label>
             <input id="editDepartmentId" type="number" min="1" />
           </div>
-          <div class="form-group">
-            <label>Status</label>
-            <select id="editIsActive">
-              <option value="1">Active</option>
-              <option value="0">Inactive</option>
-            </select>
-          </div>
+
         </div>
         <div class="modal-actions">
           <button type="submit" class="action-btn primary-btn">
@@ -269,5 +256,34 @@
   </div>
 
   <script src="manage-users.js"></script>
+  <script>
+  (function () {
+    // استخدمي نفس التخزين عندك: localStorage.user يحتوي RoleID
+    function redirectByRole() {
+      const user = JSON.parse(localStorage.getItem('user') || 'null');
+
+      const roleId = Number(user.RoleID || user.roleId);
+      if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
+      if (roleId === 2) return '/employee/employee-home.html';   // موظف
+      if (roleId === 3) return '/dept-admin/dept-admin.html';     // أدمن
+    }
+
+    // كل روابط "الصفحة الرئيسية" الموجودة في الشريط الجانبي
+    const homeLinks = document.querySelectorAll(
+      'aside .sidebar-menu a.menu-link[href$="/login/home.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
+    );
+
+    homeLinks.forEach(a => {
+      // خَلّي النقر يوجّه حسب الدور
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.location.href = redirectByRole();
+      });
+
+      // (اختياري) عدّلي الـ href الظاهر للـ Hover/Copy
+      a.setAttribute('href', redirectByRole());
+    });
+  })();
+  </script>
 </body>
 </html>

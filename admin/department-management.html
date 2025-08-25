@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-ar="إدارة القسم" data-en="Department Management">إدارة القسم</title>
+  
+  <!-- خطوط -->
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
+  
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Tajawal', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      color: #333;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .header {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 20px 30px;
+      margin-bottom: 30px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h1 {
+      color: #2d3748;
+      font-size: 2rem;
+      font-weight: 700;
+    }
+
+    .back-btn {
+      background: #4299e1;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 24px;
+      cursor: pointer;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .back-btn:hover {
+      background: #3182ce;
+      transform: translateY(-2px);
+    }
+
+    .department-info {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 30px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    .dept-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .dept-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #2d3748;
+    }
+
+    .dept-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 20px;
+    }
+
+    .stat-item {
+      text-align: center;
+      padding: 15px;
+      background: #f7fafc;
+      border-radius: 10px;
+    }
+
+    .stat-number {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #4299e1;
+      margin-bottom: 5px;
+    }
+
+    .stat-label {
+      color: #718096;
+      font-weight: 600;
+    }
+
+    .employees-section {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 30px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+    }
+
+    .section-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #2d3748;
+    }
+
+    .search-filters {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 200px;
+      padding: 12px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .filter-select {
+      padding: 12px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      min-width: 150px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: #4299e1;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #3182ce;
+    }
+
+    .btn-danger {
+      background: #e53e3e;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #c53030;
+    }
+
+    .btn-warning {
+      background: #ed8936;
+      color: white;
+    }
+
+    .btn-warning:hover {
+      background: #dd6b20;
+    }
+
+    .btn-success {
+      background: #38a169;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #2f855a;
+    }
+
+    .btn-sm {
+      padding: 8px 16px;
+      font-size: 12px;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .employees-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+    }
+
+    .employees-table th,
+    .employees-table td {
+      padding: 15px 12px;
+      text-align: center;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .employees-table th {
+      background: #f7fafc;
+      font-weight: 700;
+      color: #4a5568;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .employees-table tbody tr:hover {
+      background: #f7fafc;
+    }
+
+    .employee-info {
+      text-align: right;
+    }
+
+    .employee-name {
+      font-weight: 600;
+      color: #2d3748;
+      margin-bottom: 4px;
+    }
+
+    .employee-details {
+      font-size: 12px;
+      color: #718096;
+    }
+
+    .role-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .role-employee {
+      background: #c6f6d5;
+      color: #22543d;
+    }
+
+    .role-admin {
+      background: #fbb6ce;
+      color: #702459;
+    }
+
+    .role-super {
+      background: #bee3f8;
+      color: #2a4365;
+    }
+
+    .actions-cell {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .pending-badge {
+      background: #fbd38d;
+      color: #7b341e;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 15px;
+      padding: 30px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .modal-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #2d3748;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: #718096;
+      padding: 5px;
+      border-radius: 4px;
+      transition: all 0.3s ease;
+    }
+
+    .close-btn:hover {
+      background: #f7fafc;
+      color: #2d3748;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #4a5568;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s ease;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #4299e1;
+    }
+
+    .form-textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 25px;
+    }
+
+    .impersonation-banner {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 9999;
+      background: #e53e3e;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 8px;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: none;
+    }
+
+    .impersonation-banner button {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+      font-weight: 600;
+    }
+
+    .impersonation-banner button:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #718096;
+    }
+
+    .no-data {
+      text-align: center;
+      padding: 40px;
+      color: #718096;
+    }
+
+    .success-message {
+      background: #c6f6d5;
+      color: #22543d;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .error-message {
+      background: #fed7d7;
+      color: #742a2a;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 10px;
+      }
+      
+      .header {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+      }
+      
+      .dept-header {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+      }
+      
+      .search-filters {
+        flex-direction: column;
+      }
+      
+      .search-input {
+        min-width: auto;
+      }
+      
+      .actions-cell {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Impersonation Banner -->
+  <div id="impersonationBanner" class="impersonation-banner">
+    <button onclick="endImpersonation()">🔙 العودة للسوبر أدمن</button>
+    <span id="impersonationText">تم التبديل إلى حساب: </span>
+  </div>
+
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1 data-ar="إدارة القسم" data-en="Department Management">إدارة القسم</h1>
+      <a href="/dept-admin/dept-admin.html" class="back-btn">
+        <i class="fas fa-arrow-right"></i>
+        <span data-ar="العودة للوحة التحكم" data-en="Back to Dashboard">العودة للوحة التحكم</span>
+      </a>
+    </div>
+
+    <!-- Department Info -->
+    <div class="department-info">
+      <div class="dept-header">
+        <div class="dept-name" id="departmentName">اسم القسم</div>
+      </div>
+      <div class="dept-stats">
+        <div class="stat-item">
+          <div class="stat-number" id="totalEmployees">0</div>
+          <div class="stat-label" data-ar="إجمالي الموظفين" data-en="Total Employees">إجمالي الموظفين</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" id="activeEmployees">0</div>
+          <div class="stat-label" data-ar="الموظفون النشطون" data-en="Active Employees">الموظفون النشطون</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" id="pendingRequests">0</div>
+          <div class="stat-label" data-ar="الطلبات المعلقة" data-en="Pending Requests">الطلبات المعلقة</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" id="newEmployees">0</div>
+          <div class="stat-label" data-ar="موظفين جدد (هذا الشهر)" data-en="New Employees (This Month)">موظفين جدد (هذا الشهر)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Employees Section -->
+    <div class="employees-section">
+      <div class="section-header">
+        <h2 class="section-title" data-ar="موظفو القسم" data-en="Department Employees">موظفو القسم</h2>
+      </div>
+
+      <!-- Search and Filters -->
+      <div class="search-filters">
+        <input 
+          type="text" 
+          id="searchInput" 
+          class="search-input" 
+          placeholder="البحث بالاسم أو رقم الموظف أو البريد الإلكتروني"
+          data-ar-placeholder="البحث بالاسم أو رقم الموظف أو البريد الإلكتروني"
+          data-en-placeholder="Search by name, employee ID, or email"
+        >
+        <select id="roleFilter" class="filter-select">
+          <option value="" data-ar="جميع الأدوار" data-en="All Roles">جميع الأدوار</option>
+          <option value="2" data-ar="موظف" data-en="Employee">موظف</option>
+          <option value="3" data-ar="مدير قسم" data-en="Department Admin">مدير قسم</option>
+        </select>
+        <button class="btn btn-primary" onclick="applyFilters()">
+          <i class="fas fa-search"></i>
+          <span data-ar="بحث" data-en="Search">بحث</span>
+        </button>
+        <button class="btn btn-secondary" onclick="clearFilters()">
+          <i class="fas fa-times"></i>
+          <span data-ar="مسح" data-en="Clear">مسح</span>
+        </button>
+      </div>
+
+      <!-- Success/Error Messages -->
+      <div id="successMessage" class="success-message"></div>
+      <div id="errorMessage" class="error-message"></div>
+
+      <!-- Employees Table -->
+      <div class="table-container">
+        <table class="employees-table">
+          <thead>
+            <tr>
+              <th data-ar="معلومات الموظف" data-en="Employee Info">معلومات الموظف</th>
+              <th data-ar="رقم الموظف" data-en="Employee ID">رقم الموظف</th>
+              <th data-ar="البريد الإلكتروني" data-en="Email">البريد الإلكتروني</th>
+              <th data-ar="الدور" data-en="Role">الدور</th>
+              <th data-ar="تاريخ الانضمام" data-en="Join Date">تاريخ الانضمام</th>
+              <th data-ar="الإجراءات" data-en="Actions">الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="employeesTableBody">
+            <!-- Data will be loaded here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Request Modal -->
+  <div id="deleteModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" data-ar="طلب حذف موظف" data-en="Employee Deletion Request">طلب حذف موظف</h3>
+        <button class="close-btn" onclick="closeModal('deleteModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" data-ar="اسم الموظف" data-en="Employee Name">اسم الموظف</label>
+          <input type="text" id="deleteEmployeeName" class="form-input" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-ar="سبب الحذف" data-en="Deletion Reason">سبب الحذف</label>
+          <textarea id="deleteReason" class="form-input form-textarea" placeholder="اكتب سبب طلب حذف هذا الموظف"></textarea>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-secondary" onclick="closeModal('deleteModal')">
+            <span data-ar="إلغاء" data-en="Cancel">إلغاء</span>
+          </button>
+          <button class="btn btn-danger" onclick="submitDeleteRequest()">
+            <i class="fas fa-trash"></i>
+            <span data-ar="إرسال طلب الحذف" data-en="Submit Delete Request">إرسال طلب الحذف</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="department-management.js"></script>
+</body>
+</html>

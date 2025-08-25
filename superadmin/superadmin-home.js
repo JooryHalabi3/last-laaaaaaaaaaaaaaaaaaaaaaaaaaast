@@ -13,6 +13,17 @@ function ensureNotifMenu(anchorBtn) {
       display:none; position:absolute; width:360px; max-height:420px; overflow:auto;
       background:#fff; border:1px solid #eee; border-radius:10px; box-shadow:0 10px 20px rgba(0,0,0,.08); z-index:9999;
     `;
+    
+    // إضافة CSS للأزرار
+    const style = document.createElement('style');
+    style.textContent = `
+      .text-btn { background:none; border:none; color:#0066cc; cursor:pointer; font-size:12px; padding:4px 8px; border-radius:4px; }
+      .text-btn:hover { background:#f0f9ff; }
+      .text-btn:disabled { color:#999; cursor:not-allowed; }
+      .text-danger { color:#dc2626 !important; }
+      .text-danger:hover { background:#fef2f2 !important; }
+    `;
+    document.head.appendChild(style);
     // هيدر
     const header = document.createElement('div');
     header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #f1f1f1;';
@@ -102,13 +113,16 @@ async function loadNotificationsList() {
     const meta = document.createElement('div');
     meta.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
 
-    // زر فتح (لو فيه رابط لاحقًا RelatedType/RelatedID تقدري تبنينه)
+    // زر فتح - الانتقال لتفاصيل الشكوى
     const openBtn = document.createElement('button');
     openBtn.className = 'text-btn';
     openBtn.textContent = 'فتح';
     openBtn.onclick = async () => {
       if (!n.IsRead) await markAsRead(n.NotificationID, false);
-      // TODO: وجّهي حسب نوع/رابط الإشعار لو متوفر
+      // الانتقال لصفحة تتبع الشكوى
+      if (n.RelatedType === 'complaint' && n.RelatedID) {
+        await openComplaintDetails(n.RelatedID);
+      }
     };
 
     const readBtn = document.createElement('button');
@@ -117,7 +131,13 @@ async function loadNotificationsList() {
     readBtn.disabled = !!n.IsRead;
     readBtn.onclick = async () => { await markAsRead(n.NotificationID, true); };
 
-    meta.append(openBtn, readBtn);
+    // زر حذف التنبيه
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'text-btn text-danger';
+    deleteBtn.textContent = 'حذف';
+    deleteBtn.onclick = async () => { await deleteNotification(n.NotificationID, li); };
+
+    meta.append(openBtn, readBtn, deleteBtn);
     li.append(title, body, meta);
     list.appendChild(li);
   });
@@ -147,6 +167,84 @@ async function markAllAsRead() {
   } catch (e) {}
 }
 
+async function deleteNotification(notificationId, listItem) {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+      // إزالة التنبيه من الواجهة فورًا
+      listItem.remove();
+      // تحديث العدّاد
+      await refreshNotifBadge();
+      
+      // إذا لم تعد هناك تنبيهات، اعرض رسالة
+      const list = document.getElementById('notifList');
+      if (list && list.children.length === 0) {
+        const li = document.createElement('li');
+        li.style.padding = '12px';
+        li.textContent = 'لا توجد إشعارات';
+        list.appendChild(li);
+      }
+    }
+  } catch (e) {
+    console.error('خطأ في حذف التنبيه:', e);
+  }
+}
+
+async function openComplaintDetails(complaintId) {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_BASE_URL}/complaints/details/${complaintId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    const data = await response.json();
+    if (data.success && data.data.complaint) {
+      // إضافة معلومات المصدر للبيانات
+      const complaintToSave = {
+        ...data.data.complaint,
+        _dataSource: 'notification',
+        _timestamp: Date.now()
+      };
+      
+      // حفظ بيانات الشكوى في localStorage
+      localStorage.setItem('selectedComplaint', JSON.stringify(complaintToSave));
+      console.log('تم حفظ بيانات الشكوى من الإشعار:', complaintToSave);
+      
+      // الانتقال لصفحة التفاصيل
+      window.location.href = `/general complaints/details.html`;
+    } else {
+      // في حالة فشل الحصول على البيانات، إنشاء بيانات أساسية
+      const basicComplaint = {
+        ComplaintID: complaintId,
+        ComplaintDetails: 'جاري تحميل التفاصيل...',
+        CurrentStatus: 'غير محدد',
+        _dataSource: 'notification-basic',
+        _timestamp: Date.now()
+      };
+      localStorage.setItem('selectedComplaint', JSON.stringify(basicComplaint));
+      window.location.href = `/general complaints/details.html`;
+    }
+  } catch (error) {
+    console.error('خطأ في فتح تفاصيل الشكوى:', error);
+    // في حالة الخطأ، إنشاء بيانات أساسية
+    const basicComplaint = {
+      ComplaintID: complaintId,
+      ComplaintDetails: 'خطأ في تحميل التفاصيل',
+      CurrentStatus: 'غير محدد',
+      _dataSource: 'notification-error',
+      _timestamp: Date.now()
+    };
+    localStorage.setItem('selectedComplaint', JSON.stringify(basicComplaint));
+    window.location.href = `/general complaints/details.html`;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // حماية الصفحة حسب RoleID=1
   if (!requireSuperAdmin()) return;
@@ -162,9 +260,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // حمّل عدّاد الإشعارات واشتغل Polling
+  // حمّل عدّاد الإشعارات واشتغل Polling أسرع للحصول على إشعارات فورية
   refreshNotifBadge();
-  setInterval(refreshNotifBadge, NOTIF_POLL_MS);
+  setInterval(() => {
+    refreshNotifBadge();
+    // إذا كانت قائمة الإشعارات مفتوحة، حدّثها أيضاً
+    const notifMenu = document.querySelector('.notification-menu');
+    if (notifMenu && notifMenu.style.display === 'block') {
+      loadNotificationsList();
+    }
+  }, 10000); // كل 10 ثواني للحصول على إشعارات أسرع
 });
 
 let currentLang = localStorage.getItem('lang') || 'ar';

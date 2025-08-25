@@ -581,6 +581,8 @@ const ensureComplaintsTableStructure = async () => {
 
 // استدعاء إعداد الجدول عند بدء التشغيل
 
+const { notifyNewComplaint, notifyNewAttachment } = require('../utils/notificationUtils');
+
 // حفظ شكوى جديدة مع المرفقات
 const submitComplaint = async (req, res) => {
   try {
@@ -662,6 +664,27 @@ const [complaintResult] = await pool.execute(
 
     const complaintID = complaintResult.insertId;
 
+    // الحصول على اسم القسم للإشعار
+    let departmentName = 'غير محدد';
+    try {
+      const [deptResult] = await pool.execute(
+        'SELECT DepartmentName FROM departments WHERE DepartmentID = ?',
+        [departmentId]
+      );
+      if (deptResult.length > 0) {
+        departmentName = deptResult[0].DepartmentName;
+      }
+    } catch (deptError) {
+      console.log('لا يمكن الحصول على اسم القسم:', deptError.message);
+    }
+
+    // إرسال إشعار للسوبر أدمن عن الشكوى الجديدة
+    try {
+      await notifyNewComplaint(complaintID, patientName, departmentName);
+    } catch (notifError) {
+      console.log('خطأ في إرسال إشعار الشكوى الجديدة:', notifError.message);
+    }
+
     // حفظ المرفقات إذا وجدت - مع التعامل مع عدم وجود الجدول
     let attachments = [];
     if (req.files && req.files.length > 0) {
@@ -691,6 +714,13 @@ const [attachmentResult] = await pool.execute(
             size: file.size,
             type: file.mimetype
           });
+
+          // إرسال إشعار للسوبر أدمن عن المرفق الجديد
+          try {
+            await notifyNewAttachment(complaintID, file.originalname, 'مستخدم النظام');
+          } catch (notifError) {
+            console.log('خطأ في إرسال إشعار المرفق الجديد:', notifError.message);
+          }
         }
       } catch (attachmentError) {
         console.log('جدول المرفقات غير موجود، تم تجاهل المرفقات:', attachmentError.message);
@@ -815,6 +845,8 @@ const verifyPatientIdentity = async (req, res) => {
   }
 };
 
+const { notifyStatusUpdate } = require('../utils/notificationUtils');
+
 // تحديث حالة الشكوى
 const updateComplaintStatus = async (req, res) => {
   try {
@@ -873,6 +905,27 @@ const updateComplaintStatus = async (req, res) => {
       );
     } catch (historyError) {
       console.log('لا يمكن إضافة سجل التاريخ:', historyError.message);
+    }
+
+    // الحصول على اسم الموظف الذي قام بالتحديث للإشعار
+    let updatedByName = 'مستخدم غير معروف';
+    try {
+      const [empResult] = await pool.execute(
+        'SELECT FullName FROM employees WHERE EmployeeID = ?',
+        [employeeId]
+      );
+      if (empResult.length > 0) {
+        updatedByName = empResult[0].FullName;
+      }
+    } catch (empError) {
+      console.log('لا يمكن الحصول على اسم الموظف:', empError.message);
+    }
+
+    // إرسال إشعار للسوبر أدمن عن تحديث الحالة
+    try {
+      await notifyStatusUpdate(complaintId, oldStatus, newStatus, updatedByName);
+    } catch (notifError) {
+      console.log('خطأ في إرسال إشعار تحديث الحالة:', notifError.message);
     }
 
     res.json({

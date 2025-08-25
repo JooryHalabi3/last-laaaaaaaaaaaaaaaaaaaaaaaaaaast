@@ -260,10 +260,11 @@ router.get('/complaints/department/:departmentId/latest', async (req, res) => {
   }
 });
 
-// Get department logs
+// Get department logs with enhanced filtering
 router.get('/logs/department/:departmentId', async (req, res) => {
   try {
     const departmentId = req.params.departmentId;
+    const { activityType, employee, fromDate, toDate, page = 1, limit = 20 } = req.query;
     
     // Verify the user belongs to this department
     if (req.user.DepartmentID !== parseInt(departmentId)) {
@@ -273,19 +274,60 @@ router.get('/logs/department/:departmentId', async (req, res) => {
       });
     }
 
-    const [logs] = await pool.execute(`
+    // Build the query with filters
+    let query = `
       SELECT l.LogID, l.Username, l.ActivityType, l.Description, l.CreatedAt,
-             l.IPAddress, l.UserAgent
+             l.IPAddress, l.UserAgent, e.FullName
       FROM ActivityLogs l
       JOIN Employees e ON l.Username = e.Username
       WHERE e.DepartmentID = ?
-      ORDER BY l.CreatedAt DESC
-      LIMIT 100
-    `, [departmentId]);
+    `;
+    
+    const params = [departmentId];
+    
+    // Add filters
+    if (activityType) {
+      query += ` AND l.ActivityType LIKE ?`;
+      params.push(`%${activityType}%`);
+    }
+    
+    if (employee) {
+      query += ` AND l.Username = ?`;
+      params.push(employee);
+    }
+    
+    if (fromDate) {
+      query += ` AND DATE(l.CreatedAt) >= ?`;
+      params.push(fromDate);
+    }
+    
+    if (toDate) {
+      query += ` AND DATE(l.CreatedAt) <= ?`;
+      params.push(toDate);
+    }
+    
+    // Count total records for pagination
+    const countQuery = query.replace(
+      'SELECT l.LogID, l.Username, l.ActivityType, l.Description, l.CreatedAt, l.IPAddress, l.UserAgent, e.FullName',
+      'SELECT COUNT(*) as total'
+    );
+    
+    const [[countResult]] = await pool.execute(countQuery, params);
+    const total = countResult.total;
+    
+    // Add pagination
+    query += ` ORDER BY l.CreatedAt DESC LIMIT ? OFFSET ?`;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    params.push(parseInt(limit), offset);
+    
+    const [logs] = await pool.execute(query, params);
 
     res.json({
       success: true,
-      data: logs
+      data: logs,
+      total: total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / parseInt(limit))
     });
 
   } catch (error) {
@@ -980,6 +1022,156 @@ router.get('/permissions/available', async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching available permissions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get department information  
+router.get('/departments/:departmentId', async (req, res) => {
+  try {
+    const departmentId = req.params.departmentId;
+    
+    // Verify the user belongs to this department
+    if (req.user.DepartmentID !== parseInt(departmentId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only access your own department data.'
+      });
+    }
+
+    const [[department]] = await pool.execute(`
+      SELECT DepartmentID, DepartmentName, Description
+      FROM Departments 
+      WHERE DepartmentID = ?
+    `, [departmentId]);
+
+    if (!department) {
+      return res.status(404).json({
+        success: false,
+        message: 'Department not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: department
+    });
+
+  } catch (error) {
+    console.error('Error fetching department info:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Submit employee deletion request
+router.post('/employees/:employeeId/delete-request', async (req, res) => {
+  try {
+    const employeeId = req.params.employeeId;
+    const { reason } = req.body;
+
+    // Verify the employee belongs to the user's department
+    const [[employee]] = await pool.execute(`
+      SELECT DepartmentID, FullName FROM Employees WHERE EmployeeID = ?
+    `, [employeeId]);
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: 'Employee not found'
+      });
+    }
+
+    if (req.user.DepartmentID !== employee.DepartmentID) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only request deletion for employees in your department.'
+      });
+    }
+
+    // Prevent self-deletion
+    if (parseInt(employeeId) === req.user.EmployeeID) {
+      return res.status(403).json({
+        success: false,
+        message: 'You cannot request deletion of your own account.'
+      });
+    }
+
+    // Check if request already exists
+    const [[existingRequest]] = await pool.execute(`
+      SELECT RequestID FROM deletion_requests 
+      WHERE TableName = 'employees' AND RecordPK = ? AND Status = 'requested'
+    `, [employeeId]);
+
+    if (existingRequest) {
+      return res.status(409).json({
+        success: false,
+        message: 'A deletion request for this employee already exists.'
+      });
+    }
+
+    // Create deletion request
+    await pool.execute(`
+      INSERT INTO deletion_requests (TableName, RecordPK, RequestedBy, Reason, Snapshot)
+      VALUES ('employees', ?, ?, ?, ?)
+    `, [
+      employeeId,
+      req.user.EmployeeID,
+      reason || 'No reason provided',
+      JSON.stringify({ EmployeeID: employeeId, FullName: employee.FullName })
+    ]);
+
+    // Log the activity
+    await pool.execute(`
+      INSERT INTO ActivityLogs (EmployeeID, Username, ActivityType, Description, IPAddress, UserAgent)
+      VALUES (?, ?, 'delete_request', ?, ?, ?)
+    `, [
+      req.user.EmployeeID,
+      req.user.Username,
+      `طلب حذف الموظف: ${employee.FullName}`,
+      req.ip,
+      req.headers['user-agent']
+    ]);
+
+    res.json({
+      success: true,
+      message: 'Employee deletion request submitted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error submitting deletion request:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get pending deletion requests count
+router.get('/deletion-requests/pending', async (req, res) => {
+  try {
+    // Get pending requests for department employees
+    const [[result]] = await pool.execute(`
+      SELECT COUNT(*) as count
+      FROM deletion_requests dr
+      JOIN Employees e ON dr.RecordPK = e.EmployeeID
+      WHERE dr.TableName = 'employees' 
+        AND dr.Status = 'requested'
+        AND e.DepartmentID = ?
+    `, [req.user.DepartmentID]);
+
+    res.json({
+      success: true,
+      count: result.count || 0
+    });
+
+  } catch (error) {
+    console.error('Error fetching pending requests:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

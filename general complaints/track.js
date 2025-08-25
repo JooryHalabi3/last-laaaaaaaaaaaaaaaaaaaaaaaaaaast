@@ -305,34 +305,77 @@ async function loadComplaintData() {
   try {
     console.log('بدء تحميل بيانات الشكوى...'); // إضافة رسالة تصحيح
     
-    const selectedComplaint = localStorage.getItem("selectedComplaint");
+    let selectedComplaint = localStorage.getItem("selectedComplaint");
+    
+    // إذا لم توجد بيانات في localStorage، محاولة الحصول عليها من URL
     if (!selectedComplaint) {
-      alert("لا توجد بيانات شكوى متاحة");
-      goBack();
-      return;
+      const urlParams = new URLSearchParams(window.location.search);
+      const complaintId = urlParams.get('complaint');
+      
+      if (complaintId) {
+        console.log('لا توجد بيانات في localStorage، محاولة جلبها من API باستخدام ID:', complaintId);
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${API_BASE_URL}/complaints/details/${complaintId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const data = await response.json();
+          
+          if (data.success && data.data.complaint) {
+            selectedComplaint = JSON.stringify(data.data.complaint);
+            localStorage.setItem("selectedComplaint", selectedComplaint);
+            console.log('تم جلب بيانات الشكوى من API بنجاح');
+          } else {
+            throw new Error('فشل في جلب بيانات الشكوى من API');
+          }
+        } catch (apiError) {
+          console.error('خطأ في جلب بيانات الشكوى من API:', apiError);
+          alert("لا توجد بيانات شكوى متاحة");
+          goBack();
+          return;
+        }
+      } else {
+        alert("لا توجد بيانات شكوى متاحة");
+        goBack();
+        return;
+      }
     }
 
     const complaintFromStorage = JSON.parse(selectedComplaint);
     console.log('بيانات الشكوى من localStorage:', complaintFromStorage);
+    console.log('مصدر البيانات:', complaintFromStorage._dataSource || 'غير محدد');
+    console.log('وقت الحفظ:', complaintFromStorage._timestamp ? new Date(complaintFromStorage._timestamp).toLocaleString() : 'غير محدد');
 
-    // جلب البيانات الكاملة من API للحصول على EmployeeName
-    try {
-      const response = await fetch(`${API_BASE_URL}/complaints/details/${complaintFromStorage.ComplaintID}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        currentComplaint = data.data.complaint;
-        console.log('بيانات الشكوى الكاملة من API:', currentComplaint);
+    // استخدام البيانات من localStorage مباشرة لتجنب التضارب
+    currentComplaint = complaintFromStorage;
+    
+    // إذا كانت البيانات ناقصة، جلب البيانات الكاملة من API
+    if (!currentComplaint.PatientName || !currentComplaint.DepartmentName) {
+      console.log('البيانات ناقصة، محاولة جلب البيانات الكاملة من API...');
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/complaints/details/${currentComplaint.ComplaintID}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
         
-        // تحديث localStorage بالبيانات الكاملة
-        localStorage.setItem("selectedComplaint", JSON.stringify(currentComplaint));
-      } else {
-        console.log('فشل API، استخدام البيانات من localStorage');
-        currentComplaint = complaintFromStorage;
+        if (data.success && data.data.complaint) {
+          // دمج البيانات بعناية - الحفاظ على البيانات الموجودة إذا كانت صحيحة
+          const apiData = data.data.complaint;
+          currentComplaint = {
+            ...apiData, // البيانات من API أولاً
+            ...currentComplaint, // البيانات المحلية تُعطى الأولوية
+            // التأكد من وجود المعرف الصحيح
+            ComplaintID: currentComplaint.ComplaintID || apiData.ComplaintID
+          };
+          console.log('تم دمج البيانات من API مع البيانات المحلية');
+          
+          // تحديث localStorage بالبيانات المدمجة
+          localStorage.setItem("selectedComplaint", JSON.stringify(currentComplaint));
+        }
+      } catch (apiError) {
+        console.log('فشل في جلب البيانات الإضافية من API، استكمال بالبيانات الموجودة:', apiError.message);
       }
-    } catch (apiError) {
-      console.error('خطأ في API، استخدام البيانات من localStorage:', apiError);
-      currentComplaint = complaintFromStorage;
     }
 
     // تحميل سجل التاريخ
@@ -393,7 +436,14 @@ function displayComplaintInfo() {
   // عرض معلومات المريض
   const patientNameElement = document.getElementById('patientName');
   if (patientNameElement) {
-    patientNameElement.textContent = currentComplaint.PatientName || 'غير محدد';
+    // تجربة أسماء مختلفة للحقل لضمان العثور على الاسم الصحيح
+    const patientName = currentComplaint.PatientName || 
+                       currentComplaint.patientName || 
+                       currentComplaint.FullName ||
+                       currentComplaint.fullName ||
+                       'غير محدد';
+    patientNameElement.textContent = patientName;
+    console.log('اسم المريض المعروض:', patientName);
   }
 
   const patientIdElement = document.getElementById('patientId');

@@ -16,7 +16,7 @@ function homePathForRole(roleId) {
   if (roleId === 2) return '/employee/employee-home.html';     // موظف
   if (roleId === 3) return '/dept-admin/dept-admin.html';      // أدمن القسم
   // افتراضي (لو صار شيء غير متوقع)
-  return '/login/home.html';
+  return '/login/login.html';
 }
 
 // =====================
@@ -42,10 +42,10 @@ async function checkAuthentication() {
       return;
     }
 
-    // Only Super Admin (1) or Admin (3) can enter this page
-    if (![1,3].includes(Number(user.RoleID))) {
+    // Only Super Admin (1) can enter this page
+    if (Number(user.RoleID) !== 1) {
       alert('ليس لديك صلاحية للوصول لهذه الصفحة');
-      location.href = '/login/home.html';
+      location.href = homePathForRole(Number(user.RoleID));
       return;
     }
 
@@ -130,19 +130,15 @@ function setupEventListeners() {
     });
   }
 
-  // Quick search (header bar)
-  const quickSearch = document.getElementById('quickSearch');
-  if (quickSearch) {
-    let t;
-    quickSearch.addEventListener('input', e => {
-      clearTimeout(t);
-      t = setTimeout(() => {
-        currentFilters.quick = e.target.value.trim();
-        if (!currentFilters.quick) delete currentFilters.quick;
-        currentPage = 1;
-        loadUsers();
-      }, 400);
-    });
+  // Filter change listeners
+  const roleFilter = document.getElementById('roleFilter');
+  if (roleFilter) {
+    roleFilter.addEventListener('change', applyFilters);
+  }
+  
+  const deptFilter = document.getElementById('departmentFilter');
+  if (deptFilter) {
+    deptFilter.addEventListener('change', applyFilters);
   }
 
   // (تم إلغاء إنشاء مستخدم جديد بناء على طلبك) — الزر إن وُجد لن يعمل
@@ -178,14 +174,8 @@ async function loadUsers() {
     params.set('limit', '10');
 
     if (currentFilters.search) params.set('search', currentFilters.search);
-    if (currentFilters.quick) params.set('quick', currentFilters.quick);
-
-    const rf = document.getElementById('roleFilter')?.value?.trim();
-    const df = document.getElementById('departmentFilter')?.value?.trim();
-    const sf = document.getElementById('statusFilter')?.value?.trim();
-    if (rf) params.set('role', rf);
-    if (df) params.set('departmentId', df);
-    if (sf) params.set('isActive', sf);
+    if (currentFilters.roleId) params.set('roleId', currentFilters.roleId);
+    if (currentFilters.deptId) params.set('deptId', currentFilters.deptId);
 
     // Backend: /api/admin/users
     const res = await fetch(`${API_BASE_URL}/admin/users?${params.toString()}`, {
@@ -215,6 +205,8 @@ async function loadUsers() {
       usersPerPage: 10,
       totalUsers: data.pagination?.total || data.total || users.length
     });
+    
+    console.log('Users loaded successfully:', users.length, 'users');
 
   } catch (e) {
     console.error('loadUsers error:', e);
@@ -265,30 +257,26 @@ function renderUsers(users) {
       <td>
         <div class="user-info">
           <strong>${escapeHtml(u.FullName || '')}</strong>
-          ${u.Username ? `<br><small>@${escapeHtml(u.Username)}</small>` : ''}
+          ${u.EmployeeID ? `<br><small>#${u.EmployeeID}</small>` : ''}
         </div>
       </td>
-      <td>${escapeHtml(u.Username || '')}</td>
+      <td>${u.EmployeeID || ''}</td>
       <td>${escapeHtml(u.Email || '')}</td>
       <td>${roleLabel(u.RoleID)}</td>
       <td>${escapeHtml(u.DepartmentName || String(u.DepartmentID || '-'))}</td>
-      <td>
-        <span class="status-badge ${Number(u.IsActive) ? 'active' : 'inactive'}">
-          ${Number(u.IsActive)
-            ? (currentLang==='ar' ? 'مفعّل' : 'Active')
-            : (currentLang==='ar' ? 'مُعطّل' : 'Inactive')}
-        </span>
-      </td>
       <td class="actions-cell">
-        <button class="table-btn" title="Edit" onclick="openEdit(${Number(u.EmployeeID)})">
+        <button class="table-btn" title="تعديل" onclick="openEdit(${Number(u.EmployeeID)})">
           <i class="fa-solid fa-pen-to-square"></i>
+          <span>تعديل</span>
         </button>
         ${Number(me.RoleID) === 1 ? `
-          <button class="table-btn" title="Switch User" onclick="impersonate(${Number(u.EmployeeID)})">
+          <button class="table-btn" title="تبديل مستخدم" onclick="impersonate(${Number(u.EmployeeID)})">
             <i class="fa-solid fa-person-arrow-right"></i>
+            <span>تبديل مستخدم</span>
           </button>
-          <button class="table-btn danger" title="Disable" onclick="disableUser(${Number(u.EmployeeID)})">
-            <i class="fa-solid fa-user-slash"></i>
+          <button class="table-btn danger" title="حذف المستخدم" onclick="deleteUser(${Number(u.EmployeeID)})">
+            <i class="fa-solid fa-trash"></i>
+            <span>حذف</span>
           </button>
         ` : ''}
       </td>
@@ -347,27 +335,35 @@ function generatePages(cur, total, maxVisible = 5) {
 // Filters
 // =====================
 function applyFilters() {
-  const role = document.getElementById('roleFilter')?.value?.trim();
-  const dep  = document.getElementById('departmentFilter')?.value?.trim();
-  const st   = document.getElementById('statusFilter')?.value?.trim();
+  const roleFilter = document.getElementById('roleFilter')?.value?.trim();
+  const deptFilter = document.getElementById('departmentFilter')?.value?.trim();
+  const searchInput = document.getElementById('searchInput')?.value?.trim();
 
-  currentFilters = {
-    ...(role && { role }),
-    ...(dep && { departmentId: dep }),
-    ...(st && { isActive: st }),
-    ...(currentFilters.search && { search: currentFilters.search }),
-    ...(currentFilters.quick && { quick: currentFilters.quick }),
-  };
+  currentFilters = {};
+  
+  if (roleFilter && roleFilter !== '') {
+    currentFilters.roleId = roleFilter;
+  }
+  
+  if (deptFilter && deptFilter !== '') {
+    currentFilters.deptId = deptFilter;
+  }
+  
+  if (searchInput && searchInput !== '') {
+    currentFilters.search = searchInput;
+  }
 
+  console.log('تطبيق الفلاتر:', currentFilters);
   currentPage = 1;
   loadUsers();
 }
 
 function clearFilters() {
-  ['roleFilter','departmentFilter','statusFilter','searchInput','quickSearch']
+  ['roleFilter','departmentFilter','searchInput']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value=''; });
   currentFilters = {};
   currentPage = 1;
+  console.log('تم مسح الفلاتر');
   loadUsers();
 }
 
@@ -417,11 +413,11 @@ function openEdit(id) {
 
   setValue('editId', u.EmployeeID);
   setValue('editFullName', u.FullName || '');
-  setValue('editUsername', u.Username || ''); // للعرض فقط
+  setValue('editEmployeeID', u.EmployeeID || ''); // للعرض فقط
   setValue('editEmail', u.Email || '');
   setValue('editRole', String(u.RoleID));
   setValue('editDepartmentId', u.DepartmentID || '');
-  setValue('editIsActive', Number(u.IsActive) ? '1' : '0');
+
 
   modal.style.display = 'block';
 }
@@ -442,8 +438,7 @@ async function submitEditForm(e) {
     FullName: (document.getElementById('editFullName').value || '').trim(),
     Email:    (document.getElementById('editEmail').value || '').trim(),
     RoleID:   Number(document.getElementById('editRole').value),
-    DepartmentID: Number(document.getElementById('editDepartmentId').value) || null,
-    IsActive: Number(document.getElementById('editIsActive').value)
+    DepartmentID: Number(document.getElementById('editDepartmentId').value) || null
   };
 
   try {
@@ -518,14 +513,15 @@ async function endImpersonation() {
     if (!res.ok || !data?.success) throw new Error(data?.message || 'No active impersonation');
     localStorage.setItem('user', JSON.stringify(data.user));
     showSuccess(currentLang==='ar' ? 'تمت العودة لحساب السوبر أدمن' : 'Returned to Super Admin');
-    location.href = '/login/home.html';
+    location.href = '/superadmin/superadmin-home.html';
   } catch (e) {
     showError(e.message || 'End impersonation failed');
   }
 }
 
-async function disableUser(id) {
-  if (!confirm(currentLang==='ar' ? 'تعطيل هذا المستخدم؟' : 'Disable this user?')) return;
+async function deleteUser(id) {
+  if (!confirm(currentLang==='ar' ? 'هل أنت متأكد من حذف هذا المستخدم؟ هذا الإجراء لا يمكن التراجع عنه.' : 'Are you sure you want to delete this user? This action cannot be undone.')) return;
+  
   try {
     const token = localStorage.getItem('token');
     const res = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
@@ -533,12 +529,14 @@ async function disableUser(id) {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const data = await safeJson(res);
-    if (!res.ok || !data?.success) throw new Error(data?.message || 'Disable failed');
+    if (!res.ok || !data?.success) throw new Error(data?.message || 'Delete failed');
+    
     await loadUsers();
     await loadStats();
-    showSuccess(currentLang==='ar' ? 'تم التعطيل' : 'User disabled');
+    showSuccess(currentLang==='ar' ? 'تم حذف المستخدم بنجاح' : 'User deleted successfully');
   } catch (e) {
-    showError(e.message || 'Disable failed');
+    console.error('deleteUser error:', e);
+    showError(e.message || 'Delete failed');
   }
 }
 

@@ -20,6 +20,43 @@ let complaintsData = [];
 let departments = [];
 let complaintTypes = [];
 
+// وظيفة لحساب الوقت النسبي
+function getRelativeTime(dateString) {
+  const now = new Date();
+  const date = new Date(dateString);
+  const diffInSeconds = Math.floor((now - date) / 1000);
+  
+  if (diffInSeconds < 60) {
+    return 'الآن';
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return `قبل ${minutes} دقيقة${minutes > 1 ? '' : ''}`;
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `قبل ${hours} ساعة${hours > 1 ? '' : ''}`;
+  } else if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400);
+    return `قبل ${days} يوم${days > 1 ? '' : ''}`;
+  } else if (diffInSeconds < 2419200) {
+    const weeks = Math.floor(diffInSeconds / 604800);
+    return `قبل ${weeks} أسبوع${weeks > 1 ? '' : ''}`;
+  } else {
+    const months = Math.floor(diffInSeconds / 2419200);
+    return `قبل ${months} شهر${months > 1 ? '' : ''}`;
+  }
+}
+
+// تحديث جميع الأوقات النسبية في الصفحة
+function updateRelativeTimes() {
+  const timeElements = document.querySelectorAll('.relative-time');
+  timeElements.forEach(element => {
+    const originalDate = element.getAttribute('data-original-date');
+    if (originalDate) {
+      element.textContent = getRelativeTime(originalDate);
+    }
+  });
+}
+
 // تحديث عنوان الصفحة للمدير
 function updatePageTitleForAdmin() {
   const pageTitle = document.querySelector('h1');
@@ -261,7 +298,7 @@ function updateComplaintsDisplay() {
         // تنسيق رقم الشكوى مع padding
         const complaintNumber = String(complaint.ComplaintID).padStart(6, '0');
         
-        // تنسيق التاريخ والوقت
+        // تنسيق التاريخ والوقت مع الوقت النسبي
         const complaintDate = new Date(complaint.ComplaintDate);
         const formattedDate = complaintDate.toLocaleDateString('ar-SA', {
           year: 'numeric',
@@ -274,6 +311,7 @@ function updateComplaintsDisplay() {
           hour12: true 
         });
         const fullDateTime = `${formattedDate} - الساعة ${formattedTime}`;
+        const relativeTime = getRelativeTime(complaint.ComplaintDate);
         
         const statusClass = getStatusClass(complaint.CurrentStatus);
         const statusText = getStatusText(complaint.CurrentStatus);
@@ -290,7 +328,10 @@ function updateComplaintsDisplay() {
             <div class="complaint-header">
               <span data-ar="شكوى #${complaintNumber}" data-en="Complaint #${complaintNumber}">شكوى #${complaintNumber}</span>
               <span class="badge ${statusClass}" data-ar="${statusText}" data-en="${statusText}">${statusText}</span>
-              <span class="date">${fullDateTime}</span>
+              <div class="date-info">
+                <span class="relative-time" data-original-date="${complaint.ComplaintDate}" title="${fullDateTime}">${relativeTime}</span>
+                <span class="full-date" style="font-size: 0.8em; color: #666; display: block;">${formattedDate}</span>
+              </div>
             </div>
             <div class="complaint-body">
               <div class="details">
@@ -309,9 +350,9 @@ function updateComplaintsDisplay() {
             </div>
             <div class="actions">
               <a href="#" onclick="viewComplaintDetails(${complaint.ComplaintID})" class="btn blue" data-ar="عرض التفاصيل" data-en="View Details">عرض التفاصيل</a>
-              <a href="/general complaints/reply.html" class="btn green" data-ar="الرد على الشكوى" data-en="Reply to Complaint">الرد على الشكوى</a>
+              <a href="#" onclick="replyToComplaint(${complaint.ComplaintID})" class="btn green" data-ar="الرد على الشكوى" data-en="Reply to Complaint">الرد على الشكوى</a>
               <a href="/general complaints/status.html" class="btn gray" data-ar="تغيير الحالة" data-en="Change Status">تغيير الحالة</a>
-              <a href="/general complaints/track.html" class="btn track" data-ar="تتبع حالة الشكوى" data-en="Track Complaint">تتبع حالة الشكوى</a>
+              <a href="#" onclick="trackComplaint(${complaint.ComplaintID})" class="btn track" data-ar="تتبع حالة الشكوى" data-en="Track Complaint">تتبع حالة الشكوى</a>
               <a href="#" onclick="showTransferModal(${complaint.ComplaintID})" class="btn orange" data-ar="تحويل شكوى" data-en="Transfer Complaint">تحويل شكوى</a>
             </div>
           </div>
@@ -355,6 +396,36 @@ function viewComplaintDetails(complaintId) {
     // حفظ بيانات الشكوى في localStorage للوصول إليها في صفحة التفاصيل
     localStorage.setItem("selectedComplaint", JSON.stringify(complaint));
     window.location.href = "/general complaints/details.html";
+  }
+}
+
+function trackComplaint(complaintId) {
+  const complaint = complaintsData.find(c => c.ComplaintID === complaintId);
+  if (complaint) {
+    // التأكد من وجود البيانات الأساسية وإضافة إشارة لمصدر البيانات
+    const complaintToSave = {
+      ...complaint,
+      _dataSource: 'general-complaints',
+      _timestamp: Date.now()
+    };
+    
+    console.log('حفظ بيانات الشكوى للتتبع:', complaintToSave);
+    
+    // حفظ بيانات الشكوى في localStorage للوصول إليها في صفحة التتبع
+    localStorage.setItem("selectedComplaint", JSON.stringify(complaintToSave));
+    window.location.href = `/general complaints/track.html?complaint=${complaintId}`;
+  } else {
+    console.error('لم يتم العثور على الشكوى في البيانات المحملة');
+    alert('خطأ: لم يتم العثور على بيانات الشكوى');
+  }
+}
+
+function replyToComplaint(complaintId) {
+  const complaint = complaintsData.find(c => c.ComplaintID === complaintId);
+  if (complaint) {
+    // حفظ بيانات الشكوى في localStorage للوصول إليها في صفحة الرد
+    localStorage.setItem("selectedComplaint", JSON.stringify(complaint));
+    window.location.href = "/general complaints/reply.html";
   }
 }
 
@@ -484,6 +555,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // بدء مراقبة تحديثات الحالة
   listenForStatusUpdates();
+  
+  // تحديث الأوقات النسبية كل دقيقة
+  setInterval(updateRelativeTimes, 60000); // 60 ثانية
 
   // إضافة مستمعي الأحداث للفلاتر
   const dateFilter = document.getElementById('dateFilter');

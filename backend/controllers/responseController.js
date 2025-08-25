@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const { notifyNewResponse } = require('../utils/notificationUtils');
 
 // إضافة رد على شكوى
 const addResponse = async (req, res) => {
@@ -45,6 +46,27 @@ const addResponse = async (req, res) => {
        VALUES (?, ?, ?, NOW(), ?, ?, ?)`,
       [complaintId, employeeId, 'إضافة رد', `تم إضافة رد: ${responseText.substring(0, 50)}...`, complaintCheck[0].CurrentStatus, newStatus]
     );
+
+    // الحصول على اسم الموظف الذي قام بالرد للإشعار
+    let respondedByName = 'مستخدم غير معروف';
+    try {
+      const [empResult] = await pool.execute(
+        'SELECT FullName FROM employees WHERE EmployeeID = ?',
+        [employeeId]
+      );
+      if (empResult.length > 0) {
+        respondedByName = empResult[0].FullName;
+      }
+    } catch (empError) {
+      console.log('لا يمكن الحصول على اسم الموظف:', empError.message);
+    }
+
+    // إرسال إشعار للسوبر أدمن عن الرد الجديد
+    try {
+      await notifyNewResponse(complaintId, responseType, respondedByName);
+    } catch (notifError) {
+      console.log('خطأ في إرسال إشعار الرد الجديد:', notifError.message);
+    }
 
     res.status(201).json({
       success: true,
@@ -99,6 +121,8 @@ const getComplaintResponses = async (req, res) => {
   }
 };
 
+const { notifyStatusUpdate } = require('../utils/notificationUtils');
+
 // تغيير حالة الشكوى
 const updateComplaintStatus = async (req, res) => {
   try {
@@ -139,6 +163,27 @@ const updateComplaintStatus = async (req, res) => {
        VALUES (?, ?, ?, NOW(), ?, ?, ?)`,
       [complaintId, employeeId, 'تغيير الحالة', `تم تغيير الحالة من "${oldStatus}" إلى "${newStatus}"${notes ? ` - ملاحظات: ${notes}` : ''}`, oldStatus, newStatus]
     );
+
+    // الحصول على اسم الموظف الذي قام بالتحديث للإشعار
+    let updatedByName = 'مستخدم غير معروف';
+    try {
+      const [empResult] = await pool.execute(
+        'SELECT FullName FROM employees WHERE EmployeeID = ?',
+        [employeeId]
+      );
+      if (empResult.length > 0) {
+        updatedByName = empResult[0].FullName;
+      }
+    } catch (empError) {
+      console.log('لا يمكن الحصول على اسم الموظف:', empError.message);
+    }
+
+    // إرسال إشعار للسوبر أدمن عن تحديث الحالة
+    try {
+      await notifyStatusUpdate(complaintId, oldStatus, newStatus, updatedByName);
+    } catch (notifError) {
+      console.log('خطأ في إرسال إشعار تحديث الحالة:', notifError.message);
+    }
 
     res.json({
       success: true,

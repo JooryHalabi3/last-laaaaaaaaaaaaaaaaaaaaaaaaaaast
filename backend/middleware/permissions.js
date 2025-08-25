@@ -100,17 +100,71 @@ const checkComplaintOwnership = async (req, res, next) => {
 // صفحات محجوبة على الموظفين
 const checkBlockedPages = async (req, res, next) => {
   const blockedPages = [
-    '/general-complaints.html',
-    '/dashboard.html',
-    '/admin.html',
-    '/admin/',
-    '/department-management.html',
-    '/recycle-bin.html',
-    '/employee-data.html',
-    '/logs.html'
-  ];
+  '/general-complaints.html',
+  '/dashboard.html',
+  '/admin.html',
+  '/admin/',
+  '/department-management.html',
+  '/recycle-bin.html',
+  '/logs.html'
+];
+
+// Admin-specific pages that should only be accessible to Department Admins (RoleID=3) or Super Admins (RoleID=1)
+const adminOnlyPages = [
+  '/admin/logs.html',
+  '/admin/department-management.html',
+  '/admin/permissions.html'
+];
+
+// Pages blocked for specific roles
+const roleBlockedPages = {
+  2: [ // Employee (RoleID = 2) blocked pages
+    '/admin/logs.html',
+    '/admin/department-management.html',
+    '/superadmin/manage-users.html',
+    '/superadmin/permissions.html',
+    '/superadmin/logs.html'
+  ]
+};
 
   const currentPath = req.path || req.originalUrl || '';
+  
+  // Check if user is authenticated
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  let userRole = null;
+  
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const [users] = await pool.execute('SELECT RoleID FROM employees WHERE EmployeeID = ?', [decoded.EmployeeID]);
+      if (users.length > 0) {
+        userRole = users[0].RoleID;
+      }
+    } catch (err) {
+      // Token invalid, will be handled by other middleware
+    }
+  }
+  
+  // Check admin-only pages
+  if (adminOnlyPages.some(p => currentPath.includes(p))) {
+    if (!userRole || (userRole !== 1 && userRole !== 3)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.'
+      });
+    }
+  }
+  
+  // Check role-specific blocked pages
+  if (userRole && roleBlockedPages[userRole]) {
+    if (roleBlockedPages[userRole].some(p => currentPath.includes(p))) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Insufficient privileges.'
+      });
+    }
+  }
+  
   if (blockedPages.some(p => currentPath.includes(p))) {
     try {
       await logActivity(

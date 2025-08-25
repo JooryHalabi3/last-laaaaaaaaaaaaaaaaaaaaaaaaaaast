@@ -18,6 +18,71 @@ function checkAuthentication() {
 // متغيرات عامة
 let patientData = null;
 let complaintsData = [];
+let departmentsData = [];
+let complaintTypesData = [];
+
+// جلب الأقسام
+async function loadDepartments() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/complaints/departments`);
+    const data = await response.json();
+    if (data.success) {
+      departmentsData = data.data;
+      populateDepartmentFilter();
+    }
+  } catch (error) {
+    console.error('خطأ في جلب الأقسام:', error);
+  }
+}
+
+// جلب أنواع الشكاوى
+async function loadComplaintTypes() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/complaints/types`);
+    const data = await response.json();
+    if (data.success) {
+      complaintTypesData = data.data;
+    }
+  } catch (error) {
+    console.error('خطأ في جلب أنواع الشكاوى:', error);
+  }
+}
+
+// تعبئة قائمة الأقسام
+function populateDepartmentFilter() {
+  const departmentSelect = document.querySelector('select');
+  if (!departmentSelect) return;
+  
+  // مسح الخيارات الموجودة
+  departmentSelect.innerHTML = '<option value="">اختر القسم</option>';
+  
+  // إضافة الأقسام
+  departmentsData.forEach(dept => {
+    const option = document.createElement('option');
+    option.value = dept.DepartmentID;
+    option.textContent = dept.DepartmentName;
+    departmentSelect.appendChild(option);
+  });
+}
+
+// تعبئة قائمة أنواع الشكاوى حسب القسم
+function populateComplaintTypesForDepartment(departmentId) {
+  const typeSelect = document.querySelectorAll('select')[1];
+  if (!typeSelect) return;
+  
+  // مسح الخيارات الموجودة
+  typeSelect.innerHTML = '<option value="">اختر نوع الشكوى</option>';
+  
+  if (!departmentId) return;
+  
+  // تصفية أنواع الشكاوى للقسم المحدد (يمكن تحسينها بناء على البيانات المتاحة)
+  complaintTypesData.forEach(type => {
+    const option = document.createElement('option');
+    option.value = type.ComplaintTypeID;
+    option.textContent = type.TypeName;
+    typeSelect.appendChild(option);
+  });
+}
 
 // جلب شكاوى المريض أو الموظف حسب الصلاحيات
 async function loadPatientComplaints() {
@@ -197,12 +262,21 @@ function viewComplaintDetails(complaintId) {
   const complaint = complaintsData.find(c => c.ComplaintID === complaintId);
   if (complaint) {
     console.log('بيانات الشكوى المحددة:', complaint);
-    // حفظ بيانات الشكوى في localStorage للوصول إليها في صفحة التفاصيل
-    localStorage.setItem("selectedComplaint", JSON.stringify(complaint));
-    console.log('تم حفظ البيانات في localStorage');
-    window.location.href = "/general complaints/details.html";
+    
+    // التأكد من وجود البيانات الأساسية وإضافة إشارة لمصدر البيانات
+    const complaintToSave = {
+      ...complaint,
+      _dataSource: 'all-complaints',
+      _timestamp: Date.now()
+    };
+    
+    // حفظ بيانات الشكوى في localStorage للوصول إليها في صفحة التتبع
+    localStorage.setItem("selectedComplaint", JSON.stringify(complaintToSave));
+    console.log('تم حفظ البيانات في localStorage من all-complaints:', complaintToSave);
+    window.location.href = `/general complaints/track.html?complaint=${complaintId}`;
   } else {
     console.log('لم يتم العثور على الشكوى:', complaintId);
+    alert('خطأ: لم يتم العثور على بيانات الشكوى');
   }
 }
 
@@ -211,9 +285,9 @@ function applyFilters() {
   const dateFilter = document.querySelector('input[type="date"]').value;
   const departmentFilter = document.querySelector('select').value;
   const complaintTypeFilter = document.querySelectorAll('select')[1].value;
-  const searchFilter = document.getElementById('searchComplaint').value;
+  const searchFilter = document.getElementById('searchComplaint')?.value || '';
 
-  let filteredComplaints = complaintsData;
+  let filteredComplaints = [...complaintsData];
 
   // تصفية حسب التاريخ
   if (dateFilter) {
@@ -225,28 +299,62 @@ function applyFilters() {
   }
 
   // تصفية حسب القسم
-  if (departmentFilter && departmentFilter !== 'Department') {
+  if (departmentFilter) {
     filteredComplaints = filteredComplaints.filter(complaint => 
-      complaint.DepartmentName.includes(departmentFilter)
+      complaint.DepartmentID == departmentFilter || 
+      (complaint.DepartmentName && complaint.DepartmentName.includes(departmentFilter))
     );
   }
 
   // تصفية حسب نوع الشكوى
-  if (complaintTypeFilter && complaintTypeFilter !== 'Complaint Type') {
+  if (complaintTypeFilter) {
     filteredComplaints = filteredComplaints.filter(complaint => 
-      complaint.ComplaintTypeName.includes(complaintTypeFilter)
+      complaint.ComplaintTypeID == complaintTypeFilter ||
+      (complaint.ComplaintTypeName && complaint.ComplaintTypeName.includes(complaintTypeFilter))
     );
   }
 
-  // تصفية حسب البحث
-  if (searchFilter) {
+  // تصفية حسب البحث (رقم الشكوى أو اسم المريض)
+  if (searchFilter.trim()) {
+    const searchTerm = searchFilter.trim().toLowerCase();
     filteredComplaints = filteredComplaints.filter(complaint => 
-      complaint.ComplaintID.toString().includes(searchFilter)
+      complaint.ComplaintID.toString().includes(searchTerm) ||
+      (complaint.PatientName && complaint.PatientName.toLowerCase().includes(searchTerm)) ||
+      (complaint.ComplaintDetails && complaint.ComplaintDetails.toLowerCase().includes(searchTerm))
     );
   }
 
   // تحديث الجدول بالبيانات المصفاة
   updateComplaintsTableWithData(filteredComplaints);
+  
+  // تحديث عدد النتائج
+  const resultsCountEl = document.getElementById('resultsCount');
+  if (resultsCountEl) {
+    resultsCountEl.textContent = `عرض ${filteredComplaints.length} من أصل ${complaintsData.length} شكوى`;
+  }
+}
+
+// إعادة ضبط التصفية
+function resetFilters() {
+  // مسح جميع المدخلات
+  const dateInput = document.querySelector('input[type="date"]');
+  const departmentSelect = document.querySelector('select');
+  const typeSelect = document.querySelectorAll('select')[1];
+  const searchInput = document.getElementById('searchComplaint');
+  
+  if (dateInput) dateInput.value = '';
+  if (departmentSelect) departmentSelect.value = '';
+  if (typeSelect) typeSelect.value = '';
+  if (searchInput) searchInput.value = '';
+  
+  // إعادة عرض جميع الشكاوى
+  updateComplaintsTableWithData(complaintsData);
+  
+  // تحديث عدد النتائج
+  const resultsCountEl = document.getElementById('resultsCount');
+  if (resultsCountEl) {
+    resultsCountEl.textContent = `عرض ${complaintsData.length} شكوى`;
+  }
 }
 
 // تحديث الجدول ببيانات محددة
@@ -456,6 +564,24 @@ document.addEventListener('DOMContentLoaded', () => {
   if (applyFiltersBtn) {
     applyFiltersBtn.addEventListener('click', applyFilters);
   }
+  
+  // إضافة مستمع لزر إعادة ضبط التصفية
+  const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+  if (resetFiltersBtn) {
+    resetFiltersBtn.addEventListener('click', resetFilters);
+  }
+  
+  // إضافة مستمع للتصفية الديناميكية للقسم
+  const departmentSelect = document.querySelector('select');
+  if (departmentSelect) {
+    departmentSelect.addEventListener('change', (e) => {
+      populateComplaintTypesForDepartment(e.target.value);
+    });
+  }
+  
+  // تحميل الأقسام وأنواع الشكاوى
+  loadDepartments();
+  loadComplaintTypes();
 
   // بدء مراقبة تحديثات الحالة
   listenForStatusUpdates();

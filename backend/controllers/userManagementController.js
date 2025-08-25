@@ -85,6 +85,57 @@ exports.getStats = async (_req, res) => {
   }
 };
 
+// PUT /api/admin/users/:id - تحديث بيانات المستخدم
+exports.updateUser = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { FullName, Email, RoleID, DepartmentID } = req.body;
+
+    // التحقق من صحة البيانات
+    if (!FullName || !Email) {
+      return res.status(400).json({ success: false, message: 'الاسم والبريد الإلكتروني مطلوبان' });
+    }
+
+    if (RoleID && ![1,2,3].includes(Number(RoleID))) {
+      return res.status(400).json({ success: false, message: 'الدور غير صالح' });
+    }
+
+    // تحديث البيانات
+    const updateFields = [];
+    const updateValues = [];
+
+    if (FullName) {
+      updateFields.push('FullName = ?');
+      updateValues.push(FullName);
+    }
+    if (Email) {
+      updateFields.push('Email = ?');
+      updateValues.push(Email);
+    }
+    if (RoleID) {
+      updateFields.push('RoleID = ?');
+      updateValues.push(Number(RoleID));
+    }
+    if (DepartmentID !== undefined) {
+      updateFields.push('DepartmentID = ?');
+      updateValues.push(DepartmentID || null);
+    }
+
+    updateFields.push('UpdatedAt = NOW()');
+    updateValues.push(id);
+
+    await pool.query(
+      `UPDATE employees SET ${updateFields.join(', ')} WHERE EmployeeID = ?`,
+      updateValues
+    );
+
+    res.json({ success: true, message: 'تم تحديث بيانات المستخدم بنجاح' });
+  } catch (err) {
+    console.error('updateUser error:', err);
+    res.status(500).json({ success: false, message: 'خطأ في تحديث بيانات المستخدم', error: err.message });
+  }
+};
+
 // PUT /api/admin/users/:id/role  { roleId }
 exports.updateUserRole = async (req, res) => {
   try {

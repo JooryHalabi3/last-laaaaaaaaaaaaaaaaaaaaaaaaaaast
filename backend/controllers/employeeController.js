@@ -37,6 +37,8 @@ const getEmployeeProfile = async (req, res) => {
     }
 };
 
+const { notifyNewComplaint } = require('../utils/notificationUtils');
+
 // إنشاء شكوى جديدة
 const createComplaint = async (req, res) => {
     try {
@@ -75,6 +77,27 @@ const createComplaint = async (req, res) => {
         );
 
         const complaintId = result.insertId;
+
+        // الحصول على اسم القسم للإشعار
+        let departmentName = 'غير محدد';
+        try {
+            const [deptResult] = await pool.execute(
+                'SELECT DepartmentName FROM Departments WHERE DepartmentID = ?',
+                [departmentId]
+            );
+            if (deptResult.length > 0) {
+                departmentName = deptResult[0].DepartmentName;
+            }
+        } catch (deptError) {
+            console.log('لا يمكن الحصول على اسم القسم:', deptError.message);
+        }
+
+        // إرسال إشعار للسوبر أدمن عن الشكوى الجديدة
+        try {
+            await notifyNewComplaint(complaintId, title, departmentName);
+        } catch (notifError) {
+            console.log('خطأ في إرسال إشعار الشكوى الجديدة:', notifError.message);
+        }
 
         // تسجيل النشاط
         await logActivity(
@@ -231,6 +254,8 @@ const getComplaintDetails = async (req, res) => {
     }
 };
 
+const { notifyNewResponse } = require('../utils/notificationUtils');
+
 // إضافة رد على شكوى
 const addResponse = async (req, res) => {
     try {
@@ -283,6 +308,13 @@ const addResponse = async (req, res) => {
             'complaint'
         );
 
+        // إرسال إشعار للسوبر أدمن عن الرد الجديد
+        try {
+            await notifyNewResponse(complaintId, 'رد داخلي', req.user.FullName || req.user.Username);
+        } catch (notifError) {
+            console.log('خطأ في إرسال إشعار الرد الجديد:', notifError.message);
+        }
+
         res.status(201).json({
             success: true,
             message: 'تم إضافة الرد بنجاح',
@@ -301,6 +333,8 @@ const addResponse = async (req, res) => {
         });
     }
 };
+
+const { notifyComplaintUpdate } = require('../utils/notificationUtils');
 
 // تغيير حالة الشكوى
 const updateComplaintStatus = async (req, res) => {
@@ -356,6 +390,13 @@ const updateComplaintStatus = async (req, res) => {
             complaintId,
             'complaint'
         );
+
+        // إرسال إشعار للسوبر أدمن عن تحديث الشكوى
+        try {
+            await notifyComplaintUpdate(complaintId, `تحديث حالة الشكوى إلى "${status}"`, req.user.FullName || req.user.Username);
+        } catch (notifError) {
+            console.log('خطأ في إرسال إشعار تحديث الشكوى:', notifError.message);
+        }
 
         res.json({
             success: true,
