@@ -201,12 +201,13 @@ exports.impersonateUser = async (req, res) => {
     // جهّز توكن بهوية الهدف
     const token = jwt.sign(
       {
-        EmployeeID: target.EmployeeID,
-        Username: target.Username,
-        RoleID: target.RoleID,
-        DepartmentID: target.DepartmentID
+        employeeID: target.EmployeeID,
+        username: target.Username,
+        roleID: target.RoleID,
+        roleName: null,
+        departmentID: target.DepartmentID
       },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '2h' }
     );
 
@@ -233,7 +234,13 @@ exports.endImpersonation = async (req, res) => {
   try {
     req.session = req.session || {};
     req.session.impersonatedUser = null;
-    await pool.query(`UPDATE impersonations SET EndedAt = NOW() WHERE EndedAt IS NULL`);
+    // أنهِ فقط جلسات السوبر أدمن الحالي
+    const superAdminId = req.user?.EmployeeID || req.user?.employeeID || null;
+    if (superAdminId) {
+      await pool.query(`UPDATE impersonations SET EndedAt = NOW() WHERE EndedAt IS NULL AND SuperAdminID = ?`, [superAdminId]);
+    } else {
+      await pool.query(`UPDATE impersonations SET EndedAt = NOW() WHERE EndedAt IS NULL`);
+    }
     res.json({ success: true, message: 'تم إنهاء السويتش يوزر' });
   } catch (err) {
     console.error('endImpersonation error:', err);
