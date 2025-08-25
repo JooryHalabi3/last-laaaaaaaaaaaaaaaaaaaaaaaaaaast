@@ -32,4 +32,7 @@ router.post('/submit', complaintController.checkUserPermissions, complaintContro
 // تحديث حالة الشكوى
 router.put('/update-status/:complaintId', complaintController.updateComplaintStatus);
 
+// تحويل الشكوى إلى قسم آخر (سوبر أدمن فقط)
+router.put('/transfer/:complaintId', complaintController.checkUserPermissions, complaintController.transferComplaintToDepartment);
+
 module.exports = router; 
