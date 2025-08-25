@@ -57,7 +57,7 @@ function checkDepartmentAdminAccess() {
   
   if (!user || Number(user.RoleID) !== 3) {
     alert('Access denied. Only Department Admins can access this page.');
-    window.location.replace('/login/home.html');
+    window.location.replace('/login/login.html');
     return false;
   }
   
@@ -831,53 +831,8 @@ function testAssignmentFunctionality() {
   console.log('========================================');
 }
 
-// Department Logs Functions
-async function loadDepartmentLogs() {
-  if (!userDepartmentId) {
-    alert('Your department is not set. Please contact the administrator.');
-    return;
-  }
-  
-  try {
-    const response = await fetch(`${API_BASE_URL}/dept-admin/logs/department/${userDepartmentId}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      displayDepartmentLogs(data.data || []);
-    } else {
-      console.error('Failed to load department logs');
-    }
-  } catch (error) {
-    console.error('Error loading department logs:', error);
-  }
-}
-
-function displayDepartmentLogs(logs) {
-  const tbody = document.getElementById('departmentLogsTableBody');
-  tbody.innerHTML = '';
-
-  logs.forEach(log => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${new Date(log.CreatedAt).toLocaleString()}</td>
-      <td>${log.Username}</td>
-      <td>${log.ActivityType}</td>
-      <td>${log.Description}</td>
-    `;
-    tbody.appendChild(row);
-  });
-}
-
-async function filterDepartmentLogs() {
-  const filterType = document.getElementById('logType').value;
-  // Implementation for filtering department logs
-  console.log('Filtering logs by:', filterType);
-  loadDepartmentLogs(); // Reload with filter
-}
+// Department Logs Functions - REMOVED
+// سجلات القسم محذوفة حسب الطلب
 
 // Department Permissions Functions
 async function loadDepartmentEmployeesForPermissions() {

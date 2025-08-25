@@ -37,7 +37,7 @@ function checkSuperAdminAccess() {
   const user = JSON.parse(localStorage.getItem('user') || 'null');
   if (!user || Number(user.RoleID) !== 1) {
     alert('Access denied. Only Super Admins can access this page.');
-    window.location.replace('/login/home.html');
+    window.location.replace('/login/login.html');
     return false;
   }
   return true;

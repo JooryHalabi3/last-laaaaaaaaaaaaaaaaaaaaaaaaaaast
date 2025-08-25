@@ -30,7 +30,7 @@ async function checkAuthentication() {
     // التحقق من صلاحيات المدير
     if (user.RoleID !== 1 && user.Username?.toLowerCase() !== 'admin') {
       alert('ليس لديك صلاحية للوصول لهذه الصفحة');
-      window.location.href = '/login/home.html';
+      window.location.href = '/login/login.html';
       return;
     }
 

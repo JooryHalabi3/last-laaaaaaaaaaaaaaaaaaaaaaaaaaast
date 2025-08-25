@@ -41,7 +41,7 @@
     <!-- Sidebar Section -->
     <aside>
         <ul class="sidebar-menu">
-            <li><a href="/login/home.html" class="menu-link" data-ar="الصفحة الرئيسية" data-en="Home Page">الصفحة الرئيسية</a></li>
+            <li><a href="/login/login.html" class="menu-link" data-ar="الصفحة الرئيسية" data-en="Home Page">الصفحة الرئيسية</a></li>
             <li><a href="overview.html" class="menu-link" data-ar="نظرة عامة" data-en="Overview">نظرة عامة</a></li>
             <li><a href="report-937.html" class="menu-link " data-ar="مؤشر بلاغات 937" data-en="937 Report Index">مؤشر بلاغات 937</a></li> <!-- Active link changed -->
             <li><a href="misconduct.html" class="menu-link" data-ar="بلاغات سوء التعامل" data-en="Misconduct Reports">بلاغات سوء التعامل</a></li>
@@ -96,18 +96,18 @@
     // استخدمي نفس التخزين عندك: localStorage.user يحتوي RoleID
     function redirectByRole() {
       const user = JSON.parse(localStorage.getItem('user') || 'null');
-      if (!user) return '/login/home.html';
+      if (!user) return '/login/login.html';
 
       const roleId = Number(user.RoleID || user.roleId);
       if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
       if (roleId === 2) return '/employee/employee-home.html';   // موظف
       if (roleId === 3) return '/dept-admin/dept-admin.html';      // أدمن
-      return '/login/home.html'; // احتياطي
+      return '/login/login.html'; // احتياطي
     }
 
     // كل روابط "الصفحة الرئيسية" الموجودة في الشريط الجانبي
     const homeLinks = document.querySelectorAll(
-      'aside .sidebar-menu a.menu-link[href$="/login/home.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
+      'aside .sidebar-menu a.menu-link[href$="/login/login.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
     );
 
     homeLinks.forEach(a => {

@@ -14,7 +14,7 @@ function checkDepartmentAdminAccess() {
   const user = JSON.parse(localStorage.getItem('user') || 'null');
   if (!user || Number(user.RoleID) !== 3) {
     alert('Access denied. Only Department Admins can access this page.');
-    window.location.replace('/login/home.html');
+    window.location.replace('/login/login.html');
     return false;
   }
   

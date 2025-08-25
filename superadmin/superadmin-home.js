@@ -276,7 +276,7 @@ let currentLang = localStorage.getItem('lang') || 'ar';
 function guard(){
   const user = JSON.parse(localStorage.getItem('user') || 'null');
   if (!user || Number(user.RoleID) !== 1){
-    window.location.replace('/login/home.html'); // أو صفحة "غير مصرّح"
+    window.location.replace('/login/login.html'); // أو صفحة "غير مصرّح"
   }
 };
 
@@ -300,7 +300,7 @@ function requireSuperAdmin(){
   // (home.js يقرأ RoleID/RoleName من localStorage). :contentReference[oaicite:5]{index=5}
   if (!user || Number(user.RoleID) !== 1){
     // رجّعيه لواجهة الهوم العامة أو تسجيل الدخول
-    window.location.replace('/login/home.html'); 
+    window.location.replace('/login/login.html'); 
     return false;
   }
   return true;

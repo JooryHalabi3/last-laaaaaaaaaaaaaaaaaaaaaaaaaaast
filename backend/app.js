@@ -18,6 +18,7 @@ const inpersonComplaintsRoutes = require('./routes/inpersonComplaintsRoutes');
 const logsRoutes = require('./routes/logsRoutes');
 const permissionsRoutes = require('./routes/permissionsRoutes');
 const deptAdminRoutes = require('./routes/deptAdminRoutes');
+const employeeRoutes = require('./routes/employeeRoutes');
 const db = require('./config/database');
 const { setupEmployeesTable } = require('./controllers/authController');
 const userManagementRoutes = require('./routes/userManagementRoutes');
@@ -79,6 +80,7 @@ app.use('/api/inperson-complaints', inpersonComplaintsRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api', permissionsRoutes);
 app.use('/api/dept-admin', deptAdminRoutes);
+app.use('/api/employee', employeeRoutes);
 app.use('/api/overview', require('./routes/overviewRoutes'));
 app.use('/api/notifications', require('./routes/notificationsRoutes'));
 
@@ -132,38 +134,9 @@ async function setupPermissionsTable() {
         await db.execute(createTableQuery);
         console.log('✅ جدول RolePermissions جاهز');
         
-        // إدخال الصلاحيات الافتراضية
-        const defaultPermissions = [
-            // صلاحيات الموظف
-            ['employee', 'submit_complaint', 0],
-            ['employee', 'follow_own_complaint', 1],
-            ['employee', 'view_public_complaints', 1],
-            ['employee', 'reply_complaints', 1],
-            ['employee', 'change_complaint_status', 1],
-            ['employee', 'export_reports', 1],
-            ['employee', 'access_dashboard', 1],
-            
-            // صلاحيات المدير
-            ['manager', 'full_system_access', 1],
-            ['manager', 'user_management', 1],
-            ['manager', 'roles_management', 1],
-            ['manager', 'performance_reports', 1],
-            ['manager', 'export_data', 1],
-            ['manager', 'audit_logs', 1],
-            ['manager', 'system_config', 1],
-            ['manager', 'backup_restore', 1]
-        ];
-        
-        for (const [role, permission, hasPermission] of defaultPermissions) {
-            const insertQuery = `
-                INSERT INTO RolePermissions (role_name, permission_name, has_permission) 
-                VALUES (?, ?, ?)
-                ON DUPLICATE KEY UPDATE has_permission = VALUES(has_permission)
-            `;
-            await db.execute(insertQuery, [role, permission, hasPermission]);
-        }
-        
-        console.log('✅ تم إدخال الصلاحيات الافتراضية بنجاح');
+        // إعداد الصلاحيات الافتراضية باستخدام النظام الجديد
+        const { setupDefaultPermissions } = require('./middleware/rolePermissions');
+        await setupDefaultPermissions();
         
     } catch (error) {
         console.error('❌ خطأ في إعداد جدول الصلاحيات:', error);

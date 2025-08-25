@@ -198,7 +198,7 @@ function printPage() {
 }
 
 function goHome() {
-  window.location.href = "/login/home.html";
+  window.location.href = "/login/login.html";
 }
 
 function followUp() {

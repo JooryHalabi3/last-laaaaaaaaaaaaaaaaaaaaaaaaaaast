@@ -246,7 +246,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('backBtn').addEventListener('click', ()=>{
     const user = JSON.parse(localStorage.getItem('user') || 'null');
     if(!user){
-      window.location.href = '/login/home.html'; 
+      window.location.href = '/login/login.html'; 
       return;
     }
 
@@ -258,7 +258,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     } else if(roleId === 3){
       window.location.href = '/dept-admin/dept-admin.html';
     } else {
-      window.location.href = '/login/home.html'; // احتياطي
+      window.location.href = '/login/login.html'; // احتياطي
 
      
     }

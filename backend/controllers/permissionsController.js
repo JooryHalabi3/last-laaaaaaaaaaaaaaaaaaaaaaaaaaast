@@ -3,22 +3,21 @@ const db = require('../config/database');
 // جلب جميع الأدوار
 const getRoles = async (req, res) => {
     try {
-        const roles = [
-            {
-                name: 'employee',
-                description: 'Standard employee permissions',            
-                user_count: 24
-            },
-            {
-                name: 'manager',
-                description: 'Administrative permissions',
-                user_count: 3
-            }
-        ];
+        // جلب الأدوار من قاعدة البيانات مع عدد المستخدمين
+        const [rolesData] = await db.execute(`
+            SELECT 
+                r.RoleName as name,
+                r.Description as description,
+                COUNT(e.EmployeeID) as user_count
+            FROM roles r
+            LEFT JOIN employees e ON e.RoleID = r.RoleID
+            GROUP BY r.RoleID, r.RoleName, r.Description
+            ORDER BY r.RoleID
+        `);
         
         res.json({
             success: true,
-            data: roles
+            data: rolesData
         });
     } catch (error) {
         console.error('Error getting roles:', error);

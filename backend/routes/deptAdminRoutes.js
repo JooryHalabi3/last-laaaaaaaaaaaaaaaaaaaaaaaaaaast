@@ -3,13 +3,13 @@ const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
 const pool = require('../config/database');
 
-// Middleware to check if user is Department Admin (RoleID = 3)
+// Middleware to check if user is Department Admin (RoleID = 3) or Super Admin (RoleID = 1)
 const checkDepartmentAdminAccess = async (req, res, next) => {
   try {
-    if (!req.user || req.user.RoleID !== 3) {
+    if (!req.user || (req.user.RoleID !== 3 && req.user.RoleID !== 1)) {
       return res.status(403).json({
         success: false,
-        message: 'Access denied. Only Department Admins can access this endpoint.'
+        message: 'Access denied. Only Department Admins and Super Admins can access this endpoint.'
       });
     }
     next();
@@ -31,8 +31,8 @@ router.get('/department-employees/:departmentId', async (req, res) => {
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -42,14 +42,14 @@ router.get('/department-employees/:departmentId', async (req, res) => {
     // Get query parameters for filtering
     const { search, role, status, sortBy = 'FullName', sortOrder = 'ASC' } = req.query;
 
-    // Build the base query
+    // Build the base query - exclude Super Admins (RoleID = 1)
     let query = `
       SELECT e.EmployeeID, e.FullName, e.Username, e.Email, e.PhoneNumber, 
              e.Specialty, e.JoinDate, e.RoleID, r.RoleName, d.DepartmentName
       FROM employees e 
       JOIN roles r ON e.RoleID = r.RoleID 
       LEFT JOIN departments d ON e.DepartmentID = d.DepartmentID
-      WHERE e.DepartmentID = ?
+      WHERE e.DepartmentID = ? AND e.RoleID != 1
     `;
 
     const params = [departmentId];
@@ -105,8 +105,8 @@ router.get('/department-employees/:departmentId/permissions', async (req, res) =
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -143,8 +143,8 @@ router.get('/complaints/department/:departmentId', async (req, res) => {
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -184,8 +184,8 @@ router.get('/complaints/department/:departmentId/assignment', async (req, res) =
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -226,8 +226,8 @@ router.get('/complaints/department/:departmentId/latest', async (req, res) => {
     const departmentId = req.params.departmentId;
     const limit = parseInt(req.query.limit) || 10;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -266,8 +266,8 @@ router.get('/logs/department/:departmentId', async (req, res) => {
     const departmentId = req.params.departmentId;
     const { activityType, employee, fromDate, toDate, page = 1, limit = 20 } = req.query;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -437,8 +437,37 @@ router.post('/complaints/:complaintId/assign', async (req, res) => {
 
     // Update the complaint assignment
     await pool.execute(`
-      UPDATE Complaints SET EmployeeID = ? WHERE ComplaintID = ?
-    `, [employeeId, complaintId]);
+    UPDATE Complaints SET AssignedTo = ?, AssignedBy = ?, AssignedAt = NOW() WHERE ComplaintID = ?
+    `, [employeeId, req.user.EmployeeID, complaintId]);
+
+    // Add to complaint history
+    try {
+      const [assignedEmployee] = await pool.execute(
+        'SELECT FullName FROM employees WHERE EmployeeID = ?',
+        [employeeId]
+      );
+      const employeeName = assignedEmployee[0]?.FullName || 'موظف غير معروف';
+      
+      await pool.execute(
+        'INSERT INTO complainthistory (ComplaintID, EmployeeID, Action, ActionDetails) VALUES (?, ?, ?, ?)',
+        [
+          complaintId,
+          req.user.EmployeeID,
+          'تعيين موظف',
+          `تم تعيين الشكوى للموظف: ${employeeName}`
+        ]
+      );
+    } catch (historyError) {
+      console.log('Cannot add history record:', historyError.message);
+    }
+
+    // Send notification about assignment
+    try {
+      const { notifyComplaintAssignment } = require('../utils/notificationUtils');
+      await notifyComplaintAssignment(complaintId, employeeId, req.user.EmployeeID);
+    } catch (notifError) {
+      console.log('Error sending assignment notification:', notifError.message);
+    }
 
     res.json({
       success: true,
@@ -459,8 +488,8 @@ router.get('/dashboard/kpis/:departmentId', async (req, res) => {
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -532,8 +561,8 @@ router.get('/dashboard/trends/:departmentId', async (req, res) => {
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -568,8 +597,8 @@ router.get('/dashboard/status-distribution/:departmentId', async (req, res) => {
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -605,8 +634,8 @@ router.get('/dashboard/worklist/:departmentId', async (req, res) => {
     const departmentId = req.params.departmentId;
     const { dateRange, status, priority, assignment, search } = req.query;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -681,8 +710,8 @@ router.get('/dashboard/team/:departmentId', async (req, res) => {
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -722,8 +751,8 @@ router.get('/dashboard/sla/:departmentId', async (req, res) => {
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -772,8 +801,8 @@ router.get('/dashboard/activity/:departmentId', async (req, res) => {
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'
@@ -1034,8 +1063,8 @@ router.get('/departments/:departmentId', async (req, res) => {
   try {
     const departmentId = req.params.departmentId;
     
-    // Verify the user belongs to this department
-    if (req.user.DepartmentID !== parseInt(departmentId)) {
+    // Verify the user belongs to this department (Super Admin can access any department)
+    if (req.user.RoleID !== 1 && req.user.DepartmentID !== parseInt(departmentId)) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own department data.'

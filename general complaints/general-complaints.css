@@ -223,6 +223,9 @@ body.lang-en {
   min-width: 250px;
 }
 
+/* تم إزالة تنسيق الأزرار غير المستخدمة للسوبر أدمن */
+
+/* تنسيق أزرار الإجراءات */
 .actions {
   margin-top: 15px;
   display: flex;
@@ -230,66 +233,25 @@ body.lang-en {
   flex-wrap: wrap;
 }
 
-.btn {
-  padding: 8px 12px;
+.actions .btn {
+  padding: 8px 16px;
   border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.btn.blue {
-  background: #3b82f6;
-  color: white;
-}
-
-.btn.green {
-  background: #10b981;
-  color: white;
-}
-
-.btn.gray {
-  background: #e5e7eb;
-  color: #374151;
-}
-
-.btn.track {
-  background: white;
-  border: 1px solid #d1d5db;
-  color: #111827;
-}
-
-.footer {
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-  padding: 20px;
-  background: white;
-  border-top: 1px solid #eee;
-}
-
-.export-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  border: none;
-  padding: 10px 15px;
-  border-radius: 8px;
+  border-radius: 6px;
+  text-decoration: none;
   font-weight: bold;
+  font-size: 0.9rem;
   cursor: pointer;
+  transition: all 0.3s ease;
 }
 
-.export-page-btn {
-  background-color: #2e5e9d;
+.actions .btn.orange {
+  background-color: #ff6b35;
   color: white;
 }
 
-.export-btn.print {
-  background-color: #424954;
-  color: white;
+.actions .btn.orange:hover {
+  background-color: #e55a2b;
 }
-
 
 .page-header {
   position: relative;
@@ -313,10 +275,11 @@ body.lang-en {
 
 /* النص تحت العنوان */
 .page-subtitle {
-  font-size: 14px;
   color: #666;
+  font-size: 1rem;
+  margin-top: 10px;
   text-align: center;
-  margin-bottom: 30px;
+  font-weight: normal;
 }
 
 /* زر العودة في أقصى اليسار */
@@ -371,16 +334,32 @@ body.lang-en {
   }
 }
 
-/* إضافة CSS للنافذة المنبثقة وزر تحويل الشكوى */
-
-/* زر تحويل الشكوى */
-.btn.orange {
-    background-color: #ff9800;
-    color: white;
+/* تنسيق أزرار الإجراءات */
+.actions {
+  margin-top: 15px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.btn.orange:hover {
-    background-color: #f57c00;
+.actions .btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: bold;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.actions .btn.orange {
+  background-color: #ff6b35;
+  color: white;
+}
+
+.actions .btn.orange:hover {
+  background-color: #e55a2b;
 }
 
 /* النافذة المنبثقة */

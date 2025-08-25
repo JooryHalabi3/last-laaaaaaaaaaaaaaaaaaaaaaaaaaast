@@ -11,7 +11,7 @@ function redirectByRole(user){
     2: "/employee/employee-home.html",   // موظف
     3: "/dept-admin/dept-admin.html"       // أدمن
   };
-  const target = roleHome[roleId] || "/login/home.html"; // احتياطي
+  const target = roleHome[roleId] || "/login/login.html"; // احتياطي
   window.location.replace(target);
 }
 
