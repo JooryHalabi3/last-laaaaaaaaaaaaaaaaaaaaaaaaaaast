@@ -394,7 +394,7 @@ function updateRolesTable(roles) {
     
     roles.forEach(role => {
         const row = document.createElement('tr');
-        const roleDisplayName = role.name === 'employee' ? 'Employee' : 'Manager';
+        const roleDisplayName = role.name === 'employee' ? 'Employee' : 'admin';
         const roleDisplayNameAr = role.name === 'employee' ? 'موظف' : 'مدير';
         
         row.innerHTML = `

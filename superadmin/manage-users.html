@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title data-ar="إدارة المستخدمين - عونك" data-en="User Management - AOUNAK">إدارة المستخدمين - عونك</title>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
+  <!-- Page CSS -->
+  <link rel="stylesheet" href="manage-users.css" />
+</head>
+<body>
+  <!-- Back button -->
+  <div class="back-button">
+    <a href="#" onclick="goBack()">
+      <img src="/icon/Back.png" alt="Back Icon" class="back-icon" />
+      <span data-ar="عودة" data-en="Back">عودة</span>
+    </a>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="header-title" data-ar="عُــــــونَك" data-en="AOUNAK">عُــــــونَك</div>
+      <img src="/icon/hospital-logo.png" alt="شعار المستشفى" class="header-logo">
+      <div class="header-actions">
+        <button id="endImpersonationBtn" class="end-impersonation-btn" style="display:none">
+          <i class="fa-solid fa-user-shield"></i>
+          <span data-ar="إنهاء الدخول بالنيابة" data-en="End Impersonation">إنهاء الدخول بالنيابة</span>
+        </button>
+        <button id="langToggle" class="lang-toggle-btn">
+          <img src="/icon/lang.png" alt="language" class="lang-icon" />
+          <span id="langText">العربية | English</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main-content">
+    <!-- Page header -->
+    <div class="page-header">
+      <div class="page-title">
+        <i class="fas fa-users-cog"></i>
+        <h1 data-ar="إدارة المستخدمين" data-en="User Management">إدارة المستخدمين</h1>
+      </div>
+      <div class="page-subtitle">
+        <p data-ar="عرض وتحرير صلاحيات المستخدمين والسويتش يوزر" data-en="View & edit users, roles, and impersonation">
+          عرض وتحرير صلاحيات المستخدمين والسويتش يوزر
+        </p>
+      </div>
+    </div>
+
+    <!-- Quick stats -->
+    <div class="stats-cards">
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-users"></i></div>
+        <div class="stat-info">
+          <h3 id="totalUsers">0</h3>
+          <p data-ar="إجمالي المستخدمين" data-en="Total Users">إجمالي المستخدمين</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-user-tie"></i></div>
+        <div class="stat-info">
+          <h3 id="adminsCount">0</h3>
+          <p data-ar="عدد الأدمن" data-en="Admins Count">عدد الأدمن</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-user-shield"></i></div>
+        <div class="stat-info">
+          <h3 id="superAdminsCount">0</h3>
+          <p data-ar="عدد السوبر أدمن" data-en="Super Admins">عدد السوبر أدمن</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-container">
+      <div class="filters-header">
+        <h3 data-ar="تصفية المستخدمين" data-en="Filter Users">تصفية المستخدمين</h3>
+        <button class="collapse-btn" onclick="toggleFilters()">
+          <i class="fas fa-chevron-down"></i>
+        </button>
+      </div>
+
+      <div class="filters-content">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label data-ar="الدور" data-en="Role">الدور</label>
+            <select id="roleFilter" class="filter-input">
+              <option value="" data-ar="كل الأدوار" data-en="All Roles">كل الأدوار</option>
+              <option value="1">Super Admin</option>
+              <option value="3">Admin</option>
+              <option value="2">Employee</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label data-ar="القسم" data-en="Department">القسم</label>
+            <select id="departmentFilter" class="filter-input">
+              <option value="" data-ar="كل الأقسام" data-en="All Departments">كل الأقسام</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label data-ar="الحالة" data-en="Status">الحالة</label>
+            <select id="statusFilter" class="filter-input">
+              <option value="" data-ar="الكل" data-en="All">الكل</option>
+              <option value="1" data-ar="مفعّل" data-en="Active">مفعّل</option>
+              <option value="0" data-ar="مُعطّل" data-en="Inactive">مُعطّل</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label data-ar="بحث" data-en="Search">بحث</label>
+            <input id="searchInput" class="filter-input" type="text"
+                   placeholder="اسم / يوزر / إيميل"
+                   data-ar-placeholder="اسم / يوزر / إيميل"
+                   data-en-placeholder="Name / Username / Email">
+          </div>
+        </div>
+
+        <div class="filter-actions">
+          <button class="apply-filter-btn" onclick="applyFilters()">
+            <i class="fas fa-filter"></i>
+            <span data-ar="تطبيق الفلتر" data-en="Apply Filter">تطبيق الفلتر</span>
+          </button>
+          <button class="clear-filter-btn" onclick="clearFilters()">
+            <i class="fas fa-times"></i>
+            <span data-ar="مسح الفلاتر" data-en="Clear Filters">مسح الفلاتر</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search / actions -->
+    <div class="search-actions-bar">
+      <div class="search-container">
+        <i class="fas fa-search"></i>
+        <input type="text" id="quickSearch" class="search-input"
+               placeholder="بحث سريع..."
+               data-ar-placeholder="بحث سريع..."
+               data-en-placeholder="Quick search...">
+      </div>
+      <div class="action-buttons">
+        <button class="action-btn primary-btn" id="createUserBtn">
+          <i class="fa-solid fa-user-plus"></i>
+          <span data-ar="مستخدم جديد" data-en="New User">مستخدم جديد</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container">
+      <div class="table-header">
+        <h3 data-ar="قائمة المستخدمين" data-en="Users List">قائمة المستخدمين</h3>
+        <div class="table-info">
+          <span id="usersCount" data-ar="عرض 0-0 من 0" data-en="Showing 0-0 of 0">عرض 0-0 من 0</span>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="logs-table users-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th data-ar="الاسم" data-en="Name">الاسم</th>
+              <th>Username</th>
+              <th data-ar="الإيميل" data-en="Email">الإيميل</th>
+              <th data-ar="الدور" data-en="Role">الدور</th>
+              <th data-ar="القسم" data-en="Department">القسم</th>
+              <th data-ar="الحالة" data-en="Status">الحالة</th>
+              <th data-ar="إجراءات" data-en="Actions">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <tr class="loading-row">
+              <td colspan="8">
+                <div class="loading-spinner">
+                  <i class="fas fa-spinner fa-spin"></i>
+                  <span data-ar="جاري تحميل المستخدمين..." data-en="Loading users...">جاري تحميل المستخدمين...</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination-container">
+      <div class="pagination-info">
+        <span id="paginationInfo" data-ar="عرض 1-10 من 0" data-en="Showing 1-10 of 0">عرض 1-10 من 0</span>
+      </div>
+      <div class="pagination-controls">
+        <button class="pagination-btn" onclick="previousPage()" disabled>
+          <i class="fas fa-chevron-right"></i>
+          <span data-ar="السابق" data-en="Previous">السابق</span>
+        </button>
+        <div class="page-numbers" id="pageNumbers"></div>
+        <button class="pagination-btn" onclick="nextPage()">
+          <span data-ar="التالي" data-en="Next">التالي</span>
+          <i class="fas fa-chevron-left"></i>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Edit/Create Modal -->
+  <div id="editModal" class="modal" style="display:none">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalTitle" data-ar="تعديل المستخدم" data-en="Edit User">تعديل المستخدم</h3>
+        <button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="editForm" class="modal-body">
+        <input type="hidden" id="editId" />
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input id="editFullName" required />
+          </div>
+          <div class="form-group">
+            <label>Username (read-only)</label>
+            <input id="editUsername" disabled />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input id="editEmail" type="email" />
+          </div>
+          <div class="form-group">
+            <label>Role</label>
+            <select id="editRole">
+              <option value="1">Super Admin</option>
+              <option value="3">Admin</option>
+              <option value="2">Employee</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>DepartmentID</label>
+            <input id="editDepartmentId" type="number" min="1" />
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="editIsActive">
+              <option value="1">Active</option>
+              <option value="0">Inactive</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="action-btn primary-btn">
+            <i class="fa-solid fa-floppy-disk"></i>
+            <span data-ar="حفظ" data-en="Save">حفظ</span>
+          </button>
+          <button type="button" class="action-btn" onclick="closeModal()">
+            <i class="fa-solid fa-ban"></i>
+            <span data-ar="إلغاء" data-en="Cancel">إلغاء</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="manage-users.js"></script>
+</body>
+</html>

@@ -15,7 +15,7 @@ async function ensureCoreTables() {
 
   await pool.execute(`
     INSERT INTO Roles (RoleID, RoleName) VALUES
-    (1,'ADMIN'), (2,'EMPLOYEE'), (3,'SUPER_ADMIN')
+    (1,'SUPER_ADMIN'), (2,'EMPLOYEE'), (3,'ADMIN')
     ON DUPLICATE KEY UPDATE RoleName = VALUES(RoleName);
   `);
 

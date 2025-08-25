@@ -1,44 +1,43 @@
+// middleware/auth.js
 const jwt = require('jsonwebtoken');
-const db = require('../config/database');
+const pool = require('../config/database');
 
-const authenticateToken = async (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+async function authenticateToken(req, res, next) {
+  try {
+    // أولوية للسِشن (مثلاً بعد impersonation)
+    if (req.session?.user) {
+      req.user = req.session.user;
+      return next();
+    }
+
+    const header = req.headers['authorization'] || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
 
     if (!token) {
-        return res.status(401).json({
-            success: false,
-            message: 'Token مطلوب للمصادقة'
-        });
+      return res.status(401).json({ success: false, message: 'Token مطلوب للمصادقة' });
     }
 
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        
-        // جلب بيانات المستخدم من قاعدة البيانات
-        const [users] = await db.execute(
-            'SELECT * FROM Employees WHERE EmployeeID = ?',
-            [decoded.employeeID]
-        );
+    // ملاحظة: اسم الحقل داخل التوكن قد يكون employeeID
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    const employeeId = decoded.EmployeeID || decoded.employeeID;
 
-        if (users.length === 0) {
-            return res.status(401).json({
-                success: false,
-                message: 'المستخدم غير موجود'
-            });
-        }
+    const [rows] = await pool.execute(
+      'SELECT * FROM Employees WHERE EmployeeID = ?',
+      [employeeId]
+    );
 
-        req.user = users[0];
-        next();
-    } catch (error) {
-        console.error('Token verification error:', error);
-        return res.status(403).json({
-            success: false,
-            message: 'Token غير صالح'
-        });
+    if (!rows.length) {
+      return res.status(401).json({ success: false, message: 'المستخدم غير موجود' });
     }
-};
 
-module.exports = {
-    authenticateToken
-};
+    req.user = rows[0];
+    next();
+  } catch (err) {
+    console.error('Token verification error:', err);
+    return res.status(403).json({ success: false, message: 'Token غير صالح' });
+  }
+}
+
+// يدعم طريقتين للاستيراد: الافتراضي وبالاسم
+module.exports = authenticateToken;
+module.exports.authenticateToken = authenticateToken;
