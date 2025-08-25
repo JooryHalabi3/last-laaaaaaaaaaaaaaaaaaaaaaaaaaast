@@ -1,4 +1,4 @@
-// Admin Logs JavaScript
+// Department Logs JavaScript
 const API_BASE_URL = 'http://localhost:3001/api';
 
 let currentLang = localStorage.getItem('lang') || 'ar';
@@ -7,7 +7,7 @@ let userDepartmentId = null;
 let logsData = [];
 let currentPage = 1;
 let totalPages = 1;
-let pageSize = 20;
+let itemsPerPage = 20;
 
 // Initialize page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -22,14 +22,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Apply language
   applyLanguage(currentLang);
   
-  // Load department employees for filter
-  await loadDepartmentEmployees();
+  // Load employees for filter
+  await loadEmployeesFilter();
   
   // Load logs
   await loadLogs();
-  
-  // Setup event listeners
-  setupEventListeners();
 });
 
 // Check if user is Department Admin (RoleID = 3)
@@ -107,8 +104,8 @@ async function endImpersonation() {
   }
 }
 
-// Load department employees for filter
-async function loadDepartmentEmployees() {
+// Load employees for filter dropdown
+async function loadEmployeesFilter() {
   try {
     const response = await fetch(`${API_BASE_URL}/dept-admin/department-employees/${userDepartmentId}`, {
       headers: {
@@ -118,31 +115,24 @@ async function loadDepartmentEmployees() {
     
     if (response.ok) {
       const data = await response.json();
-      populateEmployeeFilter(data.data || []);
+      const employees = data.data || [];
+      
+      const employeeFilter = document.getElementById('employeeFilter');
+      employeeFilter.innerHTML = `<option value="">جميع الموظفين</option>`;
+      
+      employees.forEach(employee => {
+        const option = document.createElement('option');
+        option.value = employee.Username;
+        option.textContent = `${employee.FullName} (@${employee.Username})`;
+        employeeFilter.appendChild(option);
+      });
     }
   } catch (error) {
-    console.error('Error loading department employees:', error);
+    console.error('Error loading employees filter:', error);
   }
 }
 
-// Populate employee filter
-function populateEmployeeFilter(employees) {
-  const employeeFilter = document.getElementById('employeeFilter');
-  
-  // Clear existing options except the first one
-  while (employeeFilter.children.length > 1) {
-    employeeFilter.removeChild(employeeFilter.lastChild);
-  }
-  
-  employees.forEach(employee => {
-    const option = document.createElement('option');
-    option.value = employee.Username;
-    option.textContent = `${employee.FullName} (${employee.Username})`;
-    employeeFilter.appendChild(option);
-  });
-}
-
-// Load logs with filters
+// Load logs
 async function loadLogs() {
   try {
     showLoading();
@@ -150,7 +140,7 @@ async function loadLogs() {
     // Build query parameters
     const params = new URLSearchParams();
     params.set('page', currentPage);
-    params.set('limit', pageSize);
+    params.set('limit', itemsPerPage);
     
     // Apply filters
     const activityType = document.getElementById('activityTypeFilter')?.value;
@@ -163,7 +153,7 @@ async function loadLogs() {
     if (fromDate) params.set('fromDate', fromDate);
     if (toDate) params.set('toDate', toDate);
     
-    const response = await fetch(`${API_BASE_URL}/dept-admin/logs/department/${userDepartmentId}?${params}`, {
+    const response = await fetch(`${API_BASE_URL}/dept-admin/logs/${userDepartmentId}?${params}`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
@@ -172,11 +162,11 @@ async function loadLogs() {
     if (response.ok) {
       const data = await response.json();
       logsData = data.data || [];
-      totalPages = Math.ceil((data.total || logsData.length) / pageSize);
+      totalPages = data.pagination?.totalPages || 1;
       
       displayLogs();
       updatePagination();
-      updateStats();
+      updateStats(data.stats);
     } else {
       throw new Error('فشل في تحميل السجلات');
     }
@@ -204,10 +194,10 @@ function displayLogs() {
   tbody.innerHTML = logsData.map(log => `
     <tr>
       <td>${formatDateTime(log.CreatedAt)}</td>
-      <td>${escapeHtml(log.Username || '-')}</td>
+      <td>${escapeHtml(log.FullName || log.Username || '-')}</td>
       <td>
         <span class="activity-badge activity-${getActivityClass(log.ActivityType)}">
-          ${escapeHtml(log.ActivityType || '-')}
+          ${getActivityLabel(log.ActivityType)}
         </span>
       </td>
       <td>${escapeHtml(log.Description || '-')}</td>
@@ -218,113 +208,81 @@ function displayLogs() {
 
 // Get activity class for styling
 function getActivityClass(activityType) {
-  const type = (activityType || '').toLowerCase();
-  
-  if (type.includes('login')) return 'login';
-  if (type.includes('complaint')) return 'complaint';
-  if (type.includes('assignment') || type.includes('assign')) return 'assignment';
-  if (type.includes('status') || type.includes('update')) return 'status_update';
-  
-  return 'default';
+  switch (activityType) {
+    case 'login': return 'login';
+    case 'complaint': return 'complaint';
+    case 'assignment': return 'assignment';
+    case 'status_update': return 'status_update';
+    default: return 'default';
+  }
+}
+
+// Get activity label in Arabic
+function getActivityLabel(activityType) {
+  switch (activityType) {
+    case 'login': return 'تسجيل دخول';
+    case 'logout': return 'تسجيل خروج';
+    case 'complaint': return 'شكوى';
+    case 'assignment': return 'توزيع';
+    case 'status_update': return 'تحديث حالة';
+    case 'response': return 'رد';
+    case 'export_logs': return 'تصدير سجلات';
+    case 'delete_logs': return 'حذف سجلات';
+    case 'delete_request': return 'طلب حذف';
+    default: return activityType || 'غير محدد';
+  }
+}
+
+// Update statistics
+function updateStats(stats) {
+  if (stats) {
+    document.getElementById('totalLogs').textContent = stats.total || 0;
+    document.getElementById('todayLogs').textContent = stats.today || 0;
+    document.getElementById('activeUsers').textContent = stats.activeUsers || 0;
+    document.getElementById('lastActivity').textContent = stats.lastActivity || '-';
+  }
 }
 
 // Update pagination
 function updatePagination() {
   const pagination = document.getElementById('pagination');
-  
-  if (totalPages <= 1) {
-    pagination.innerHTML = '';
-    return;
-  }
-  
-  let html = '';
+  let paginationHTML = '';
   
   // Previous button
-  html += `
-    <button onclick="changePage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>
-      <i class="fas fa-chevron-right"></i>
+  paginationHTML += `
+    <button ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})">
+      السابق
     </button>
   `;
   
   // Page numbers
-  const startPage = Math.max(1, currentPage - 2);
-  const endPage = Math.min(totalPages, currentPage + 2);
-  
-  if (startPage > 1) {
-    html += `<button onclick="changePage(1)">1</button>`;
-    if (startPage > 2) {
-      html += `<span>...</span>`;
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === currentPage || i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+      paginationHTML += `
+        <button class="${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">
+          ${i}
+        </button>
+      `;
+    } else if (i === currentPage - 2 || i === currentPage + 2) {
+      paginationHTML += '<span>...</span>';
     }
-  }
-  
-  for (let i = startPage; i <= endPage; i++) {
-    html += `
-      <button onclick="changePage(${i})" ${i === currentPage ? 'class="active"' : ''}>
-        ${i}
-      </button>
-    `;
-  }
-  
-  if (endPage < totalPages) {
-    if (endPage < totalPages - 1) {
-      html += `<span>...</span>`;
-    }
-    html += `<button onclick="changePage(${totalPages})">${totalPages}</button>`;
   }
   
   // Next button
-  html += `
-    <button onclick="changePage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>
-      <i class="fas fa-chevron-left"></i>
+  paginationHTML += `
+    <button ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})">
+      التالي
     </button>
   `;
   
-  pagination.innerHTML = html;
+  pagination.innerHTML = paginationHTML;
 }
 
 // Change page
 function changePage(page) {
-  if (page < 1 || page > totalPages || page === currentPage) return;
-  
-  currentPage = page;
-  loadLogs();
-}
-
-// Update statistics
-function updateStats() {
-  // Update total logs
-  document.getElementById('totalLogs').textContent = logsData.length || 0;
-  
-  // Calculate today's logs
-  const today = new Date().toDateString();
-  const todayLogs = logsData.filter(log => 
-    new Date(log.CreatedAt).toDateString() === today
-  ).length;
-  document.getElementById('todayLogs').textContent = todayLogs;
-  
-  // Calculate unique active users
-  const uniqueUsers = new Set(
-    logsData.filter(log => log.Username).map(log => log.Username)
-  ).size;
-  document.getElementById('activeUsers').textContent = uniqueUsers;
-  
-  // Get last activity time
-  if (logsData.length > 0) {
-    const lastActivity = new Date(logsData[0].CreatedAt);
-    const now = new Date();
-    const diffMinutes = Math.floor((now - lastActivity) / (1000 * 60));
-    
-    let timeText;
-    if (diffMinutes < 1) {
-      timeText = 'الآن';
-    } else if (diffMinutes < 60) {
-      timeText = `${diffMinutes} دقيقة`;
-    } else {
-      const diffHours = Math.floor(diffMinutes / 60);
-      timeText = `${diffHours} ساعة`;
-    }
-    
-    document.getElementById('lastActivity').textContent = timeText;
+  if (page >= 1 && page <= totalPages) {
+    currentPage = page;
+    loadLogs();
   }
 }
 
@@ -340,7 +298,6 @@ function clearFilters() {
   document.getElementById('employeeFilter').value = '';
   document.getElementById('fromDateFilter').value = '';
   document.getElementById('toDateFilter').value = '';
-  
   currentPage = 1;
   loadLogs();
 }
@@ -348,12 +305,9 @@ function clearFilters() {
 // Export logs
 async function exportLogs(format) {
   try {
-    // Build query parameters for export
+    // Build query parameters (same as current filters)
     const params = new URLSearchParams();
-    params.set('format', format);
-    params.set('departmentId', userDepartmentId);
     
-    // Apply current filters
     const activityType = document.getElementById('activityTypeFilter')?.value;
     const employee = document.getElementById('employeeFilter')?.value;
     const fromDate = document.getElementById('fromDateFilter')?.value;
@@ -363,39 +317,104 @@ async function exportLogs(format) {
     if (employee) params.set('employee', employee);
     if (fromDate) params.set('fromDate', fromDate);
     if (toDate) params.set('toDate', toDate);
+    params.set('format', format);
     
-    const response = await fetch(`${API_BASE_URL}/logs/export?${params}`, {
+    const response = await fetch(`${API_BASE_URL}/dept-admin/logs/export/${userDepartmentId}?${params}`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
     });
     
     if (response.ok) {
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `department-logs-${new Date().toISOString().split('T')[0]}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      if (format === 'csv') {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `department-logs-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else if (format === 'pdf') {
+        const data = await response.json();
+        if (data.success) {
+          generatePDF(data.data);
+        } else {
+          throw new Error(data.message || 'فشل في تصدير PDF');
+        }
+      }
     } else {
       throw new Error('فشل في تصدير السجلات');
     }
   } catch (error) {
     console.error('Error exporting logs:', error);
-    alert('فشل في تصدير السجلات');
+    alert('فشل في تصدير السجلات: ' + error.message);
   }
 }
 
-// Setup event listeners
-function setupEventListeners() {
-  // Filter change events
-  document.getElementById('activityTypeFilter')?.addEventListener('change', applyFilters);
-  document.getElementById('employeeFilter')?.addEventListener('change', applyFilters);
-  document.getElementById('fromDateFilter')?.addEventListener('change', applyFilters);
-  document.getElementById('toDateFilter')?.addEventListener('change', applyFilters);
+// Generate PDF from logs data
+function generatePDF(logs) {
+  try {
+    // Create a simple HTML table for PDF generation
+    const htmlContent = `
+      <html dir="rtl">
+        <head>
+          <meta charset="UTF-8">
+          <title>سجلات نشاط القسم</title>
+          <style>
+            body { font-family: Arial, sans-serif; direction: rtl; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+            th { background-color: #f2f2f2; font-weight: bold; }
+            .header { text-align: center; margin-bottom: 20px; }
+            .header h1 { color: #333; }
+            .header p { color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>سجلات نشاط القسم</h1>
+            <p>تاريخ التصدير: ${new Date().toLocaleDateString('ar-SA')}</p>
+            <p>عدد السجلات: ${logs.length}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>الوقت</th>
+                <th>الموظف</th>
+                <th>نوع النشاط</th>
+                <th>الوصف</th>
+                <th>عنوان IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${logs.map(log => `
+                <tr>
+                  <td>${formatDateTime(log.CreatedAt)}</td>
+                  <td>${escapeHtml(log.FullName || log.Username || '-')}</td>
+                  <td>${getActivityLabel(log.ActivityType)}</td>
+                  <td>${escapeHtml(log.Description || '-')}</td>
+                  <td>${escapeHtml(log.IPAddress || '-')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    
+    // Open in new window for printing/saving as PDF
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    alert('فشل في إنشاء ملف PDF');
+  }
 }
 
 // Utility functions
@@ -432,7 +451,8 @@ function formatDateTime(dateString) {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    second: '2-digit'
   });
 }
 

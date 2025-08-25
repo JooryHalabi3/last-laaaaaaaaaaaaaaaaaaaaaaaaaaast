@@ -5,7 +5,7 @@ const router = express.Router();
 const controller = require('../controllers/userManagementController');
 const { authenticateToken } = require('../middleware/auth');
 
-// قائمة المستخدمين (مع ترقيم صفحات) => يطابق طلب الواجهة /api/admin/users?page=&limit=
+// قائمة المستخدمين (مع ترقيم صفحات) => يطابق طلب الواجهة /api/users?page=&limit=
 router.get('/', authenticateToken, controller.listUsers);
 
 // إحصائيات مبسطة للواجهة (عدد الكل/حسب الأدوار)

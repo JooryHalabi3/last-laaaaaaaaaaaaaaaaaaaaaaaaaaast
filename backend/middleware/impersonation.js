@@ -53,11 +53,9 @@ const authenticateWithImpersonation = async (req, res, next) => {
     const userAgent = req.headers['user-agent'] || '';
     const referer = req.headers['referer'] || '';
     
-    // If user is Super Admin but accessing dept-admin or admin pages
+    // If user is Super Admin but accessing dept-admin pages
     const isDeptAdminRequest = referer.includes('/dept-admin/') || 
-                              referer.includes('/admin/') || 
-                              req.originalUrl.includes('/dept-admin/') ||
-                              req.originalUrl.includes('/admin/');
+                              req.originalUrl.includes('/dept-admin/');
     
     if (user.RoleID === 1 && isDeptAdminRequest) {
       // Check if there's an active impersonation session

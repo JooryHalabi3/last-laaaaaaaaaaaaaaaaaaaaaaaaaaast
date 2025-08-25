@@ -35,6 +35,17 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Serve static HTML files
+app.use(express.static(path.join(__dirname, '..')));
+
+// Route to serve dept-admin pages
+app.use('/dept-admin', express.static(path.join(__dirname, '..', 'dept-admin')));
+app.use('/superadmin', express.static(path.join(__dirname, '..', 'superadmin')));
+app.use('/login', express.static(path.join(__dirname, '..', 'login')));
+app.use('/DashBoard', express.static(path.join(__dirname, '..', 'DashBoard')));
+app.use('/employee', express.static(path.join(__dirname, '..', 'employee')));
+app.use('/icon', express.static(path.join(__dirname, '..', 'icon')));
+
 // Logging middleware
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
@@ -72,7 +83,7 @@ app.use('/api/overview', require('./routes/overviewRoutes'));
 app.use('/api/notifications', require('./routes/notificationsRoutes'));
 
 app.use(
-    '/api/admin/users',
+    '/api/users',
     authenticateToken,
     requireRole(1),
     userManagementRoutes

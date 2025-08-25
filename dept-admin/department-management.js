@@ -129,6 +129,10 @@ async function loadDepartmentInfo() {
 function updateDepartmentDisplay() {
   if (departmentData) {
     document.getElementById('departmentName').textContent = departmentData.DepartmentName || 'القسم';
+    
+    // Update department statistics
+    document.getElementById('totalEmployees').textContent = departmentData.totalEmployees || 0;
+    document.getElementById('newEmployees').textContent = departmentData.newEmployees || 0;
   }
 }
 
@@ -196,7 +200,7 @@ function displayEmployees() {
       <td>${escapeHtml(employee.Email || '-')}</td>
       <td>
         <span class="role-badge role-${getRoleClass(employee.RoleID)}">
-          ${getRoleName(employee.RoleID)}
+          ${escapeHtml(employee.RoleName || getRoleName(employee.RoleID))}
         </span>
       </td>
       <td>${formatDate(employee.JoinDate)}</td>
@@ -273,7 +277,7 @@ function getRoleName(roleId) {
 // Update statistics
 function updateStats() {
   const totalEmployees = employeesData.length;
-  const activeEmployees = employeesData.filter(emp => !emp.Status || emp.Status !== 'inactive').length;
+  const activeEmployees = employeesData.filter(emp => emp.RoleID && emp.RoleID !== 1).length; // Exclude super admin
   
   // Calculate new employees this month
   const thisMonth = new Date();
@@ -282,11 +286,16 @@ function updateStats() {
     emp.JoinDate && new Date(emp.JoinDate) >= thisMonth
   ).length;
   
-  document.getElementById('totalEmployees').textContent = totalEmployees;
+  // Only update if department data hasn't already set these values
+  if (!departmentData || !departmentData.totalEmployees) {
+    document.getElementById('totalEmployees').textContent = totalEmployees;
+  }
   document.getElementById('activeEmployees').textContent = activeEmployees;
-  document.getElementById('newEmployees').textContent = newEmployees;
+  if (!departmentData || !departmentData.newEmployees) {
+    document.getElementById('newEmployees').textContent = newEmployees;
+  }
   
-  // TODO: Load pending deletion requests count
+  // Load pending deletion requests count
   loadPendingRequests();
 }
 
@@ -357,13 +366,13 @@ async function submitDeleteRequest() {
 // Edit permissions
 function editPermissions(employeeId) {
   // Navigate to permissions page with employee ID
-  window.location.href = `/admin/permissions.html?employee=${employeeId}`;
+  window.location.href = `/superadmin/permissions.html?employee=${employeeId}`;
 }
 
 // View activity
 function viewActivity(employeeId) {
   // Navigate to logs page with employee filter
-  window.location.href = `/admin/logs.html?employee=${employeeId}`;
+  window.location.href = `logs.html?employee=${employeeId}`;
 }
 
 // Apply filters

@@ -177,8 +177,8 @@ async function loadUsers() {
     if (currentFilters.roleId) params.set('roleId', currentFilters.roleId);
     if (currentFilters.deptId) params.set('deptId', currentFilters.deptId);
 
-    // Backend: /api/admin/users
-    const res = await fetch(`${API_BASE_URL}/admin/users?${params.toString()}`, {
+    // Backend: /api/users
+    const res = await fetch(`${API_BASE_URL}/users?${params.toString()}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
 
@@ -220,7 +220,7 @@ async function loadUsers() {
 async function loadStats() {
   try {
     const token = localStorage.getItem('token');
-    const res = await fetch(`${API_BASE_URL}/admin/users`, {
+    const res = await fetch(`${API_BASE_URL}/users`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const data = await safeJson(res);
@@ -442,7 +442,7 @@ async function submitEditForm(e) {
   };
 
   try {
-    const res = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
+    const res = await fetch(`${API_BASE_URL}/users/${id}`, {
       method: 'PUT',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },
       body: JSON.stringify(payload)
@@ -477,7 +477,7 @@ async function impersonate(id) {
     if (superUser)  localStorage.setItem('rootUser',  superUser);
 
     // Call backend to impersonate target user
-    const res = await fetch(`${API_BASE_URL}/admin/users/${id}/impersonate`, {
+    const res = await fetch(`${API_BASE_URL}/users/${id}/impersonate`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${superToken}` }
     });
@@ -505,7 +505,7 @@ async function impersonate(id) {
 async function endImpersonation() {
   try {
     const token = localStorage.getItem('token');
-    const res = await fetch(`${API_BASE_URL}/admin/users/impersonate/end`, {
+    const res = await fetch(`${API_BASE_URL}/users/impersonate/end`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -524,7 +524,7 @@ async function deleteUser(id) {
   
   try {
     const token = localStorage.getItem('token');
-    const res = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
+    const res = await fetch(`${API_BASE_URL}/users/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });

@@ -3,7 +3,7 @@ const pool = require('../config/database');
 const jwt = require('jsonwebtoken');
 
 
-// GET /api/admin/users?page=1&limit=10&search=&roleId=&deptId=
+// GET /api/users?page=1&limit=10&search=&roleId=&deptId=
 exports.listUsers = async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -67,7 +67,7 @@ exports.listUsers = async (req, res) => {
   }
 };
 
-// GET /api/admin/users/stats
+// GET /api/users/stats
 exports.getStats = async (_req, res) => {
   try {
     const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM employees`);
@@ -85,7 +85,7 @@ exports.getStats = async (_req, res) => {
   }
 };
 
-// PUT /api/admin/users/:id - تحديث بيانات المستخدم
+// PUT /api/users/:id - تحديث بيانات المستخدم
 exports.updateUser = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -136,7 +136,7 @@ exports.updateUser = async (req, res) => {
   }
 };
 
-// PUT /api/admin/users/:id/role  { roleId }
+// PUT /api/users/:id/role  { roleId }
 exports.updateUserRole = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -155,7 +155,7 @@ exports.updateUserRole = async (req, res) => {
   }
 };
 
-// DELETE /api/admin/users/:id
+// DELETE /api/users/:id
 exports.deleteUser = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -167,7 +167,7 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// POST /api/admin/users/impersonate/:id  { reason? }
+// POST /api/users/impersonate/:id  { reason? }
 
 exports.impersonateUser = async (req, res) => {
   try {
@@ -228,7 +228,7 @@ exports.impersonateUser = async (req, res) => {
 };
 
 
-// POST /api/admin/users/impersonate/end
+// POST /api/users/impersonate/end
 exports.endImpersonation = async (req, res) => {
   try {
     req.session = req.session || {};

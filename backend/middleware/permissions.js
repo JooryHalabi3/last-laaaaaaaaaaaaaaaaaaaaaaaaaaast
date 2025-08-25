@@ -102,25 +102,23 @@ const checkBlockedPages = async (req, res, next) => {
   const blockedPages = [
   '/general-complaints.html',
   '/dashboard.html',
-  '/admin.html',
-  '/admin/',
-  '/department-management.html',
+  '/dept-admin/department-management.html',
   '/recycle-bin.html',
-  '/logs.html'
+  '/dept-admin/logs.html'
 ];
 
 // Admin-specific pages that should only be accessible to Department Admins (RoleID=3) or Super Admins (RoleID=1)
 const adminOnlyPages = [
-  '/admin/logs.html',
-  '/admin/department-management.html',
-  '/admin/permissions.html'
+  '/dept-admin/logs.html',
+  '/dept-admin/department-management.html',
+  '/superadmin/permissions.html'
 ];
 
 // Pages blocked for specific roles
 const roleBlockedPages = {
   2: [ // Employee (RoleID = 2) blocked pages
-    '/admin/logs.html',
-    '/admin/department-management.html',
+    '/dept-admin/logs.html',
+    '/dept-admin/department-management.html',
     '/superadmin/manage-users.html',
     '/superadmin/permissions.html',
     '/superadmin/logs.html'

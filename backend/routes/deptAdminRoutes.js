@@ -45,10 +45,10 @@ router.get('/department-employees/:departmentId', async (req, res) => {
     // Build the base query
     let query = `
       SELECT e.EmployeeID, e.FullName, e.Username, e.Email, e.PhoneNumber, 
-             e.Specialty, e.JoinDate, e.Status, r.RoleName, d.DepartmentName
-      FROM Employees e 
-      JOIN Roles r ON e.RoleID = r.RoleID 
-      LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
+             e.Specialty, e.JoinDate, e.RoleID, r.RoleName, d.DepartmentName
+      FROM employees e 
+      JOIN roles r ON e.RoleID = r.RoleID 
+      LEFT JOIN departments d ON e.DepartmentID = d.DepartmentID
       WHERE e.DepartmentID = ?
     `;
 
@@ -63,7 +63,7 @@ router.get('/department-employees/:departmentId', async (req, res) => {
 
     // Add role filter
     if (role) {
-      query += ` AND r.RoleName = ?`;
+      query += ` AND e.RoleID = ?`;
       params.push(role);
     }
 
@@ -117,9 +117,9 @@ router.get('/department-employees/:departmentId/permissions', async (req, res) =
       SELECT e.EmployeeID, e.FullName, e.Username, e.Email, e.PhoneNumber, 
              e.Specialty, e.JoinDate, r.RoleName, d.DepartmentName,
              'أساسية' as Permissions
-      FROM Employees e 
-      JOIN Roles r ON e.RoleID = r.RoleID 
-      LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
+      FROM employees e 
+      JOIN roles r ON e.RoleID = r.RoleID 
+      LEFT JOIN departments d ON e.DepartmentID = d.DepartmentID
       WHERE e.DepartmentID = ? AND e.RoleID != 1
       ORDER BY e.FullName
     `, [departmentId]);
@@ -156,11 +156,11 @@ router.get('/complaints/department/:departmentId', async (req, res) => {
              c.Priority, p.FullName as PatientName, p.NationalID_Iqama,
              d.DepartmentName, ct.TypeName as ComplaintTypeName,
              e.FullName as AssignedEmployeeName
-      FROM Complaints c
-      JOIN Patients p ON c.PatientID = p.PatientID
-      JOIN Departments d ON c.DepartmentID = d.DepartmentID
-      JOIN ComplaintTypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
-      LEFT JOIN Employees e ON c.EmployeeID = e.EmployeeID
+      FROM complaints c
+      JOIN patients p ON c.PatientID = p.PatientID
+      JOIN departments d ON c.DepartmentID = d.DepartmentID
+      JOIN complainttypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
+      LEFT JOIN employees e ON c.EmployeeID = e.EmployeeID
       WHERE c.DepartmentID = ?
       ORDER BY c.ComplaintDate DESC
     `, [departmentId]);
@@ -278,8 +278,8 @@ router.get('/logs/department/:departmentId', async (req, res) => {
     let query = `
       SELECT l.LogID, l.Username, l.ActivityType, l.Description, l.CreatedAt,
              l.IPAddress, l.UserAgent, e.FullName
-      FROM ActivityLogs l
-      JOIN Employees e ON l.Username = e.Username
+      FROM activitylogs l
+      JOIN employees e ON l.Username = e.Username
       WHERE e.DepartmentID = ?
     `;
     
@@ -362,7 +362,7 @@ router.get('/overview/department/:departmentId', async (req, res) => {
         SUM(CASE WHEN CurrentStatus IN ('جديدة', 'قيد المراجعة') THEN 1 ELSE 0 END) as open,
         SUM(CASE WHEN CurrentStatus = 'قيد المعالجة' THEN 1 ELSE 0 END) as in_progress,
         SUM(CASE WHEN CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as closed
-      FROM Complaints 
+      FROM complaints 
       WHERE DepartmentID = ?
     `, [departmentId]);
 
@@ -372,8 +372,8 @@ router.get('/overview/department/:departmentId', async (req, res) => {
     const [latestComplaints] = await pool.execute(`
       SELECT c.ComplaintID, c.ComplaintDate, c.CurrentStatus,
              e.FullName as AssignedEmployeeName
-      FROM Complaints c
-      LEFT JOIN Employees e ON c.EmployeeID = e.EmployeeID
+      FROM complaints c
+      LEFT JOIN employees e ON c.EmployeeID = e.EmployeeID
       WHERE c.DepartmentID = ?
       ORDER BY c.ComplaintDate DESC
       LIMIT 10
@@ -1044,7 +1044,7 @@ router.get('/departments/:departmentId', async (req, res) => {
 
     const [[department]] = await pool.execute(`
       SELECT DepartmentID, DepartmentName, Description
-      FROM Departments 
+      FROM departments 
       WHERE DepartmentID = ?
     `, [departmentId]);
 
@@ -1055,9 +1055,21 @@ router.get('/departments/:departmentId', async (req, res) => {
       });
     }
 
+    // Get additional statistics
+    const [[employeeStats]] = await pool.execute(`
+      SELECT 
+        COUNT(*) as totalEmployees,
+        COUNT(CASE WHEN JoinDate >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 END) as newEmployees
+      FROM employees 
+      WHERE DepartmentID = ?
+    `, [departmentId]);
+
     res.json({
       success: true,
-      data: department
+      data: {
+        ...department,
+        ...employeeStats
+      }
     });
 
   } catch (error) {
@@ -1077,7 +1089,7 @@ router.post('/employees/:employeeId/delete-request', async (req, res) => {
 
     // Verify the employee belongs to the user's department
     const [[employee]] = await pool.execute(`
-      SELECT DepartmentID, FullName FROM Employees WHERE EmployeeID = ?
+      SELECT DepartmentID, FullName FROM employees WHERE EmployeeID = ?
     `, [employeeId]);
 
     if (!employee) {
@@ -1128,7 +1140,7 @@ router.post('/employees/:employeeId/delete-request', async (req, res) => {
 
     // Log the activity
     await pool.execute(`
-      INSERT INTO ActivityLogs (EmployeeID, Username, ActivityType, Description, IPAddress, UserAgent)
+      INSERT INTO activitylogs (EmployeeID, Username, ActivityType, Description, IPAddress, UserAgent)
       VALUES (?, ?, 'delete_request', ?, ?, ?)
     `, [
       req.user.EmployeeID,
@@ -1159,7 +1171,7 @@ router.get('/deletion-requests/pending', async (req, res) => {
     const [[result]] = await pool.execute(`
       SELECT COUNT(*) as count
       FROM deletion_requests dr
-      JOIN Employees e ON dr.RecordPK = e.EmployeeID
+      JOIN employees e ON dr.RecordPK = e.EmployeeID
       WHERE dr.TableName = 'employees' 
         AND dr.Status = 'requested'
         AND e.DepartmentID = ?
@@ -1172,6 +1184,113 @@ router.get('/deletion-requests/pending', async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching pending requests:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Export department logs
+router.get('/logs/export/:departmentId', async (req, res) => {
+  try {
+    const departmentId = req.params.departmentId;
+    const { format = 'csv', activityType, employee, fromDate, toDate } = req.query;
+    
+    // Verify the user belongs to this department
+    if (req.user.DepartmentID !== parseInt(departmentId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only export your own department data.'
+      });
+    }
+
+    // Build the query with filters (same as logs endpoint)
+    let query = `
+      SELECT l.LogID, l.Username, l.ActivityType, l.Description, l.CreatedAt,
+             l.IPAddress, e.FullName
+      FROM activitylogs l
+      JOIN employees e ON l.Username = e.Username
+      WHERE e.DepartmentID = ?
+    `;
+    
+    const params = [departmentId];
+    
+    // Add filters
+    if (activityType) {
+      query += ` AND l.ActivityType LIKE ?`;
+      params.push(`%${activityType}%`);
+    }
+    
+    if (employee) {
+      query += ` AND l.Username = ?`;
+      params.push(employee);
+    }
+    
+    if (fromDate) {
+      query += ` AND DATE(l.CreatedAt) >= ?`;
+      params.push(fromDate);
+    }
+    
+    if (toDate) {
+      query += ` AND DATE(l.CreatedAt) <= ?`;
+      params.push(toDate);
+    }
+    
+    query += ` ORDER BY l.CreatedAt DESC`;
+    
+    const [logs] = await pool.execute(query, params);
+
+    // Log the export activity
+    await pool.execute(`
+      INSERT INTO activitylogs (EmployeeID, Username, ActivityType, Description, IPAddress, UserAgent)
+      VALUES (?, ?, 'export_logs', ?, ?, ?)
+    `, [
+      req.user.EmployeeID,
+      req.user.Username,
+      `تم تصدير ${logs.length} سجل قسم بصيغة ${format}`,
+      req.ip,
+      req.headers['user-agent']
+    ]);
+
+    if (format === 'csv') {
+      // Create CSV content
+      const headers = ['الوقت', 'الموظف', 'نوع النشاط', 'الوصف', 'عنوان IP'];
+      const csvRows = [
+        headers.join(','),
+        ...logs.map(log => [
+          `"${log.CreatedAt || ''}"`,
+          `"${log.FullName || log.Username || ''}"`,
+          `"${log.ActivityType || ''}"`,
+          `"${log.Description || ''}"`,
+          `"${log.IPAddress || ''}"`
+        ].join(','))
+      ];
+      
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=department-${departmentId}-logs-${new Date().toISOString().split('T')[0]}.csv`);
+      res.send('\uFEFF' + csvRows.join('\n')); // Add BOM for proper UTF-8 support
+    } else if (format === 'pdf') {
+      // For PDF, we'll return JSON that frontend can convert
+      res.json({
+        success: true,
+        data: logs,
+        format: 'pdf',
+        exportDate: new Date().toISOString(),
+        totalRecords: logs.length
+      });
+    } else {
+      // JSON format
+      res.json({
+        success: true,
+        data: logs,
+        exportDate: new Date().toISOString(),
+        totalRecords: logs.length
+      });
+    }
+
+  } catch (error) {
+    console.error('Error exporting department logs:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
