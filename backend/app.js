@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
+const { authenticateToken } = require('./middleware/auth');
+const requireRole = require('./middleware/requireRole'); // الديفولت المصدَّر هو الدالة الأولى
+const userManagementRoutes = require('./routes/userManagementRoutes');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -64,7 +67,7 @@ app.use('/api/logs', logsRoutes);
 app.use('/api', permissionsRoutes);
 app.use('/api/dept-admin', deptAdminRoutes);
 app.use('/api/overview', require('./routes/overviewRoutes'));
-app.use('/api/superadmin/users', userManagementRoutes);
+app.use('/api/admin/users', userManagementRoutes);
 
 
 

@@ -1,43 +1,55 @@
 // middleware/auth.js
 const jwt = require('jsonwebtoken');
-const pool = require('../config/database');
+const db = require('../config/database');
 
-async function authenticateToken(req, res, next) {
+/**
+ * يتحقق من الـ JWT ويحمّل بيانات المستخدم ويضعها في req.user
+ * يضيف حقول مساعدة: isSuperAdmin, isAdmin, isEmployee
+ */
+const authenticateToken = async (req, res, next) => {
   try {
-    // أولوية للسِشن (مثلاً بعد impersonation)
-    if (req.session?.user) {
-      req.user = req.session.user;
-      return next();
-    }
-
-    const header = req.headers['authorization'] || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    const authHeader = req.headers['authorization'] || '';
+    const token = (authHeader.startsWith('Bearer ') && authHeader.split(' ')[1]) || null;
 
     if (!token) {
       return res.status(401).json({ success: false, message: 'Token مطلوب للمصادقة' });
     }
 
-    // ملاحظة: اسم الحقل داخل التوكن قد يكون employeeID
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-    const employeeId = decoded.EmployeeID || decoded.employeeID;
+    if (!decoded?.employeeID) {
+      return res.status(403).json({ success: false, message: 'Token غير صالح' });
+    }
 
-    const [rows] = await pool.execute(
-      'SELECT * FROM Employees WHERE EmployeeID = ?',
-      [employeeId]
+    // اجلب المستخدم + اسم الدور (اختياري)
+    const [rows] = await db.execute(
+      `SELECT e.*, r.RoleName
+       FROM Employees e
+       LEFT JOIN Roles r ON r.RoleID = e.RoleID
+       WHERE e.EmployeeID = ?`,
+      [decoded.employeeID]
     );
 
-    if (!rows.length) {
+    if (rows.length === 0) {
       return res.status(401).json({ success: false, message: 'المستخدم غير موجود' });
     }
 
-    req.user = rows[0];
+    const user = rows[0];
+
+    // تأكد الأرقام أرقام
+    user.RoleID = Number(user.RoleID);
+    user.DepartmentID = user.DepartmentID != null ? Number(user.DepartmentID) : null;
+
+    // فلاتر مساعدة سريعة
+    user.isSuperAdmin = user.RoleID === 1;
+    user.isEmployee   = user.RoleID === 2;
+    user.isAdmin      = user.RoleID === 3;
+
+    req.user = user;
     next();
-  } catch (err) {
-    console.error('Token verification error:', err);
+  } catch (error) {
+    console.error('Token verification error:', error);
     return res.status(403).json({ success: false, message: 'Token غير صالح' });
   }
-}
+};
 
-// يدعم طريقتين للاستيراد: الافتراضي وبالاسم
-module.exports = authenticateToken;
-module.exports.authenticateToken = authenticateToken;
+module.exports = { authenticateToken };

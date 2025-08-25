@@ -29,13 +29,13 @@ async function checkAuthentication() {
     const token = localStorage.getItem('token');
     const user  = JSON.parse(localStorage.getItem('user') || '{}');
 
-    if (!token || !user) {
+    if (!token || !user || !user.RoleID) {
       location.href = '/login/login.html';
       return;
     }
 
     // Only Super Admin (1) or Admin (3) can enter this page
-    if (![1,3].includes(user.RoleID)) {
+    if (![1,3].includes(Number(user.RoleID))) {
       alert('ليس لديك صلاحية للوصول لهذه الصفحة');
       location.href = '/login/home.html';
       return;
@@ -43,7 +43,7 @@ async function checkAuthentication() {
 
     // Show "End Impersonation" button to Super Admin; backend may return 400 if not impersonating
     const endBtn = document.getElementById('endImpersonationBtn');
-    if (endBtn && user.RoleID === 1) endBtn.style.display = 'inline-flex';
+    if (endBtn && Number(user.RoleID) === 1) endBtn.style.display = 'inline-flex';
 
   } catch (err) {
     console.error('Auth check error:', err);
@@ -77,8 +77,8 @@ async function loadDepartments() {
     const res = await fetch(`${API_BASE_URL}/complaints/departments`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    const data = await res.json();
-    if (data?.success) {
+    const data = await safeJson(res);
+    if (res.ok && data?.success) {
       allDepartments = data.data || [];
       const sel = document.getElementById('departmentFilter');
       if (sel) {
@@ -114,7 +114,8 @@ function setupEventListeners() {
     searchInput.addEventListener('input', e => {
       clearTimeout(t);
       t = setTimeout(() => {
-        currentFilters.search = e.target.value;
+        currentFilters.search = e.target.value.trim();
+        if (!currentFilters.search) delete currentFilters.search;
         currentPage = 1;
         loadUsers();
       }, 400);
@@ -128,18 +129,17 @@ function setupEventListeners() {
     quickSearch.addEventListener('input', e => {
       clearTimeout(t);
       t = setTimeout(() => {
-        currentFilters.quick = e.target.value;
+        currentFilters.quick = e.target.value.trim();
+        if (!currentFilters.quick) delete currentFilters.quick;
         currentPage = 1;
         loadUsers();
       }, 400);
     });
   }
 
-  // Create user button => open modal empty (Super Admin only)
+  // (تم إلغاء إنشاء مستخدم جديد بناء على طلبك) — الزر إن وُجد لن يعمل
   const createBtn = document.getElementById('createUserBtn');
-  if (createBtn) {
-    createBtn.addEventListener('click', () => openEdit(null));
-  }
+  if (createBtn) createBtn.style.display = 'none';
 
   // End impersonation
   const endBtn = document.getElementById('endImpersonationBtn');
@@ -164,31 +164,35 @@ async function loadUsers() {
   try {
     const token = localStorage.getItem('token');
 
-    // Build query params including paging & filters
-    const params = new URLSearchParams({
-      page: currentPage,
-      limit: 10,
-      ...(currentFilters.search ? { search: currentFilters.search } : {}),
-      ...(currentFilters.quick ? { quick: currentFilters.quick } : {}),
-      ...(document.getElementById('roleFilter')?.value ? { role: document.getElementById('roleFilter').value } : {}),
-      ...(document.getElementById('departmentFilter')?.value ? { departmentId: document.getElementById('departmentFilter').value } : {}),
-      ...(document.getElementById('statusFilter')?.value ? { isActive: document.getElementById('statusFilter').value } : {})
-    });
+    // Build query params including paging & filters (لا ترسل قيم فارغة)
+    const params = new URLSearchParams();
+    params.set('page', String(currentPage));
+    params.set('limit', '10');
 
-    // Backend route from earlier design: /api/admin/users
+    if (currentFilters.search) params.set('search', currentFilters.search);
+    if (currentFilters.quick) params.set('quick', currentFilters.quick);
+
+    const rf = document.getElementById('roleFilter')?.value?.trim();
+    const df = document.getElementById('departmentFilter')?.value?.trim();
+    const sf = document.getElementById('statusFilter')?.value?.trim();
+    if (rf) params.set('role', rf);
+    if (df) params.set('departmentId', df);
+    if (sf) params.set('isActive', sf);
+
+    // Backend: /api/admin/users
     const res = await fetch(`${API_BASE_URL}/admin/users?${params.toString()}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
 
-    const data = await res.json();
+    const data = await safeJson(res);
     if (!res.ok || !data?.success) throw new Error(data?.message || 'Load users failed');
 
     const users = data.data || [];
     allUsers = users;
 
-    // If your backend returns pagination meta, use it; otherwise compute rough paging client-side
-    // Here we simulate totalPages if not provided
-    totalPages = data.pagination?.totalPages || Math.max(1, Math.ceil((data.pagination?.total || users.length) / (data.pagination?.limit || 10)));
+    // Pagination (server meta إن وُجد، وإلا تقدير بسيط)
+    totalPages = data.pagination?.totalPages
+      || Math.max(1, Math.ceil((data.pagination?.total || users.length) / (data.pagination?.limit || 10)));
     currentPage = data.pagination?.currentPage || currentPage;
 
     renderUsers(users);
@@ -207,7 +211,7 @@ async function loadUsers() {
   } catch (e) {
     console.error('loadUsers error:', e);
     displayEmptyState();
-    showError('حدث خطأ في تحميل المستخدمين: ' + e.message);
+    showError('حدث خطأ في تحميل المستخدمين: ' + (e.message || ''));
   } finally {
     isLoading = false;
   }
@@ -216,19 +220,18 @@ async function loadUsers() {
 async function loadStats() {
   try {
     const token = localStorage.getItem('token');
-    // You can create a stats endpoint; here we reuse list and count by role
     const res = await fetch(`${API_BASE_URL}/admin/users`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    const data = await res.json();
+    const data = await safeJson(res);
     if (res.ok && data?.success) {
       const list = data.data || [];
       const total = list.length;
       const admins = list.filter(u => Number(u.RoleID) === 3).length;
       const supers = list.filter(u => Number(u.RoleID) === 1).length;
-      document.getElementById('totalUsers').textContent = formatNumber(total);
-      document.getElementById('adminsCount').textContent = formatNumber(admins);
-      document.getElementById('superAdminsCount').textContent = formatNumber(supers);
+      setText('totalUsers', formatNumber(total));
+      setText('adminsCount', formatNumber(admins));
+      setText('superAdminsCount', formatNumber(supers));
     }
   } catch (e) {
     console.warn('Stats load warning:', e.message);
@@ -262,19 +265,21 @@ function renderUsers(users) {
       <td>${roleLabel(u.RoleID)}</td>
       <td>${escapeHtml(u.DepartmentName || String(u.DepartmentID || '-'))}</td>
       <td>
-        <span class="status-badge ${u.IsActive ? 'active' : 'inactive'}">
-          ${u.IsActive ? (currentLang==='ar' ? 'مفعّل' : 'Active') : (currentLang==='ar' ? 'مُعطّل' : 'Inactive')}
+        <span class="status-badge ${Number(u.IsActive) ? 'active' : 'inactive'}">
+          ${Number(u.IsActive)
+            ? (currentLang==='ar' ? 'مفعّل' : 'Active')
+            : (currentLang==='ar' ? 'مُعطّل' : 'Inactive')}
         </span>
       </td>
       <td class="actions-cell">
-        <button class="table-btn" title="Edit" onclick="openEdit(${u.EmployeeID})">
+        <button class="table-btn" title="Edit" onclick="openEdit(${Number(u.EmployeeID)})">
           <i class="fa-solid fa-pen-to-square"></i>
         </button>
-        ${me.RoleID === 1 ? `
-          <button class="table-btn" title="Switch User" onclick="impersonate(${u.EmployeeID})">
+        ${Number(me.RoleID) === 1 ? `
+          <button class="table-btn" title="Switch User" onclick="impersonate(${Number(u.EmployeeID)})">
             <i class="fa-solid fa-person-arrow-right"></i>
           </button>
-          <button class="table-btn danger" title="Disable" onclick="disableUser(${u.EmployeeID})">
+          <button class="table-btn danger" title="Disable" onclick="disableUser(${Number(u.EmployeeID)})">
             <i class="fa-solid fa-user-slash"></i>
           </button>
         ` : ''}
@@ -319,8 +324,8 @@ function updateUsersInfo(p) {
   const start = ((p.currentPage - 1) * p.usersPerPage) + 1;
   const end = Math.min(p.currentPage * p.usersPerPage, p.totalUsers);
   const infoText = `${currentLang==='ar' ? 'عرض' : 'Showing'} ${start}-${end} ${currentLang==='ar' ? 'من' : 'of'} ${p.totalUsers}`;
-  document.getElementById('usersCount').textContent = infoText;
-  document.getElementById('paginationInfo').textContent = infoText;
+  setText('usersCount', infoText);
+  setText('paginationInfo', infoText);
 }
 
 function generatePages(cur, total, maxVisible = 5) {
@@ -334,9 +339,9 @@ function generatePages(cur, total, maxVisible = 5) {
 // Filters
 // =====================
 function applyFilters() {
-  const role = document.getElementById('roleFilter')?.value;
-  const dep  = document.getElementById('departmentFilter')?.value;
-  const st   = document.getElementById('statusFilter')?.value;
+  const role = document.getElementById('roleFilter')?.value?.trim();
+  const dep  = document.getElementById('departmentFilter')?.value?.trim();
+  const st   = document.getElementById('statusFilter')?.value?.trim();
 
   currentFilters = {
     ...(role && { role }),
@@ -386,43 +391,29 @@ function nextPage() {
 // Edit modal
 // =====================
 function openEdit(id) {
-  const me = JSON.parse(localStorage.getItem('user') || '{}');
   const modal = document.getElementById('editModal');
   const title = document.getElementById('modalTitle');
 
+  // تعديل فقط (لا يوجد إنشاء مستخدم جديد)
   if (!id) {
-    // Create user (Super Admin only)
-    if (me.RoleID !== 1) {
-      alert(currentLang==='ar' ? 'صلاحية السوبر أدمن فقط' : 'Super Admin only');
-      return;
-    }
-    title.setAttribute('data-ar','مستخدم جديد');
-    title.setAttribute('data-en','New User');
-    title.textContent = currentLang==='ar' ? 'مستخدم جديد' : 'New User';
-
-    document.getElementById('editId').value = '';
-    document.getElementById('editFullName').value = '';
-    document.getElementById('editUsername').value = '(auto on backend)';
-    document.getElementById('editEmail').value = '';
-    document.getElementById('editRole').value = '2';
-    document.getElementById('editDepartmentId').value = '';
-    document.getElementById('editIsActive').value = '1';
-  } else {
-    // Edit existing
-    title.setAttribute('data-ar','تعديل المستخدم');
-    title.setAttribute('data-en','Edit User');
-    title.textContent = currentLang==='ar' ? 'تعديل المستخدم' : 'Edit User';
-
-    const u = allUsers.find(x => Number(x.EmployeeID) === Number(id));
-    if (!u) return;
-    document.getElementById('editId').value = u.EmployeeID;
-    document.getElementById('editFullName').value = u.FullName || '';
-    document.getElementById('editUsername').value = u.Username || '';
-    document.getElementById('editEmail').value = u.Email || '';
-    document.getElementById('editRole').value = String(u.RoleID);
-    document.getElementById('editDepartmentId').value = u.DepartmentID || '';
-    document.getElementById('editIsActive').value = u.IsActive ? '1' : '0';
+    showError(currentLang==='ar' ? 'إنشاء مستخدم جديد غير مفعّل' : 'Create user is disabled');
+    return;
   }
+
+  title.setAttribute('data-ar','تعديل المستخدم');
+  title.setAttribute('data-en','Edit User');
+  title.textContent = currentLang==='ar' ? 'تعديل المستخدم' : 'Edit User';
+
+  const u = allUsers.find(x => Number(x.EmployeeID) === Number(id));
+  if (!u) return;
+
+  setValue('editId', u.EmployeeID);
+  setValue('editFullName', u.FullName || '');
+  setValue('editUsername', u.Username || ''); // للعرض فقط
+  setValue('editEmail', u.Email || '');
+  setValue('editRole', String(u.RoleID));
+  setValue('editDepartmentId', u.DepartmentID || '');
+  setValue('editIsActive', Number(u.IsActive) ? '1' : '0');
 
   modal.style.display = 'block';
 }
@@ -434,41 +425,29 @@ function closeModal() {
 
 async function submitEditForm(e) {
   e.preventDefault();
-  const me = JSON.parse(localStorage.getItem('user') || '{}');
   const token = localStorage.getItem('token');
 
-  const id = document.getElementById('editId').value.trim();
+  const id = (document.getElementById('editId').value || '').trim();
+  if (!id) { showError(currentLang==='ar' ? 'المعرف مفقود' : 'Missing ID'); return; }
+
   const payload = {
-    FullName: document.getElementById('editFullName').value.trim(),
-    Email:    document.getElementById('editEmail').value.trim(),
+    FullName: (document.getElementById('editFullName').value || '').trim(),
+    Email:    (document.getElementById('editEmail').value || '').trim(),
     RoleID:   Number(document.getElementById('editRole').value),
     DepartmentID: Number(document.getElementById('editDepartmentId').value) || null,
     IsActive: Number(document.getElementById('editIsActive').value)
   };
 
   try {
-    // Create or Update
-    if (!id) {
-      if (me.RoleID !== 1) throw new Error('Super Admin only');
-      const res = await fetch(`${API_BASE_URL}/admin/users`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) throw new Error(data?.message || 'Create failed');
-      showSuccess(currentLang==='ar' ? 'تم إنشاء المستخدم' : 'User created');
-    } else {
-      const res = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) throw new Error(data?.message || 'Update failed');
-      showSuccess(currentLang==='ar' ? 'تم تحديث البيانات' : 'Updated successfully');
-    }
+    const res = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await safeJson(res);
+    if (!res.ok || !data?.success) throw new Error(data?.message || 'Update failed');
 
+    showSuccess(currentLang==='ar' ? 'تم تحديث البيانات' : 'Updated successfully');
     closeModal();
     await loadUsers();
     await loadStats();
@@ -490,7 +469,7 @@ async function impersonate(id) {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    const data = await res.json();
+    const data = await safeJson(res);
     if (!res.ok || !data?.success) throw new Error(data?.message || 'Impersonation failed');
 
     localStorage.setItem('user', JSON.stringify(data.user));
@@ -508,7 +487,7 @@ async function endImpersonation() {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    const data = await res.json();
+    const data = await safeJson(res);
     if (!res.ok || !data?.success) throw new Error(data?.message || 'No active impersonation');
     localStorage.setItem('user', JSON.stringify(data.user));
     showSuccess(currentLang==='ar' ? 'تمت العودة لحساب السوبر أدمن' : 'Returned to Super Admin');
@@ -526,7 +505,7 @@ async function disableUser(id) {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    const data = await res.json();
+    const data = await safeJson(res);
     if (!res.ok || !data?.success) throw new Error(data?.message || 'Disable failed');
     await loadUsers();
     await loadStats();
@@ -553,10 +532,23 @@ function escapeHtml(txt = '') {
   const d = document.createElement('div'); d.textContent = txt; return d.innerHTML;
 }
 
-function showLoading() { /* You can add spinner if needed */ }
+function setText(id, v) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = v;
+}
+function setValue(id, v) {
+  const el = document.getElementById(id);
+  if (el) el.value = v;
+}
+
+async function safeJson(res) {
+  try { return await res.json(); } catch { return {}; }
+}
+
+function showLoading() { /* Spinner placeholder */ }
 function hideLoading() { /* Hide spinner */ }
 
-function showError(msg) { alert((currentLang==='ar' ? 'خطأ: ' : 'Error: ') + msg); }
+function showError(msg) { alert((currentLang==='ar' ? 'خطأ: ' : 'Error: ') + (msg || '')); }
 function showSuccess(msg) { alert(msg); }
 
 function goBack() { window.history.back(); }
