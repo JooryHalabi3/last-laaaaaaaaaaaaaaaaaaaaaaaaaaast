@@ -51,7 +51,9 @@ async function checkAuthentication() {
 
     // Show "End Impersonation" button to Super Admin; backend may return 400 if not impersonating
     const endBtn = document.getElementById('endImpersonationBtn');
-    if (endBtn && Number(user.RoleID) === 1) endBtn.style.display = 'inline-flex';
+    // Show end button if super admin and we have a stored root token (means currently impersonating)
+    const hasRoot = !!localStorage.getItem('rootToken');
+    if (endBtn && Number(user.RoleID) === 1 && hasRoot) endBtn.style.display = 'inline-flex';
 
   } catch (err) {
     console.error('Auth check error:', err);
@@ -511,7 +513,13 @@ async function endImpersonation() {
     });
     const data = await safeJson(res);
     if (!res.ok || !data?.success) throw new Error(data?.message || 'No active impersonation');
-    localStorage.setItem('user', JSON.stringify(data.user));
+    // Restore original super admin identity
+    const rootToken = localStorage.getItem('rootToken');
+    const rootUser  = localStorage.getItem('rootUser');
+    if (rootToken) localStorage.setItem('token', rootToken);
+    if (rootUser)  localStorage.setItem('user', rootUser);
+    localStorage.removeItem('rootToken');
+    localStorage.removeItem('rootUser');
     showSuccess(currentLang==='ar' ? 'تمت العودة لحساب السوبر أدمن' : 'Returned to Super Admin');
     location.href = '/superadmin/superadmin-home.html';
   } catch (e) {

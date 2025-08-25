@@ -947,6 +947,76 @@ const updateComplaintStatus = async (req, res) => {
   }
 };
 
+// تحويل الشكوى إلى قسم آخر (للسوبر أدمن فقط)
+const transferComplaint = async (req, res) => {
+  try {
+    const { complaintId } = req.params;
+    const { newDepartmentId } = req.body;
+
+    if (!req.user || req.user.roleID !== 1) {
+      return res.status(403).json({
+        success: false,
+        message: 'السماح للسوبر أدمن فقط بتحويل الشكوى'
+      });
+    }
+
+    if (!complaintId || !newDepartmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'معرف الشكوى والقسم الجديد مطلوبان'
+      });
+    }
+
+    // تأكد من وجود الشكوى
+    const [[existingComplaint]] = await pool.execute(
+      'SELECT ComplaintID, DepartmentID, EmployeeID FROM Complaints WHERE ComplaintID = ? LIMIT 1',
+      [complaintId]
+    );
+
+    if (!existingComplaint) {
+      return res.status(404).json({ success: false, message: 'الشكوى غير موجودة' });
+    }
+
+    // تأكد من وجود القسم الجديد
+    const [[targetDept]] = await pool.execute(
+      'SELECT DepartmentID, DepartmentName FROM Departments WHERE DepartmentID = ? LIMIT 1',
+      [newDepartmentId]
+    );
+
+    if (!targetDept) {
+      return res.status(400).json({ success: false, message: 'القسم الجديد غير موجود' });
+    }
+
+    // تحديث الشكوى: نقل للقسم الجديد وإلغاء الإسناد للموظف إن وجد
+    await pool.execute(
+      'UPDATE Complaints SET DepartmentID = ?, EmployeeID = NULL WHERE ComplaintID = ?',
+      [newDepartmentId, complaintId]
+    );
+
+    // تسجيل سجل في التاريخ (إن توفر الجدول)
+    try {
+      await pool.execute(
+        `INSERT INTO ComplaintHistory (
+          ComplaintID, EmployeeID, Stage, Remarks, OldStatus, NewStatus
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          complaintId,
+          req.user.employeeID,
+          'تحويل الشكوى',
+          `تم تحويل الشكوى من قسم ${existingComplaint.DepartmentID} إلى ${targetDept.DepartmentID}`,
+          '—',
+          '—'
+        ]
+      );
+    } catch (_) {}
+
+    res.json({ success: true, message: 'تم تحويل الشكوى بنجاح' });
+  } catch (error) {
+    console.error('خطأ في تحويل الشكوى:', error);
+    res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
+  }
+};
+
 module.exports = {
   getDepartments,
   getComplaintTypes,
