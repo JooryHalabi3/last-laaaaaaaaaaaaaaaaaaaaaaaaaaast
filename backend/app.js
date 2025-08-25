@@ -18,6 +18,7 @@ const inpersonComplaintsRoutes = require('./routes/inpersonComplaintsRoutes');
 const logsRoutes = require('./routes/logsRoutes');
 const permissionsRoutes = require('./routes/permissionsRoutes');
 const deptAdminRoutes = require('./routes/deptAdminRoutes');
+const employeeRoutes = require('./routes/employeeRoutes');
 const db = require('./config/database');
 const { setupEmployeesTable } = require('./controllers/authController');
 const userManagementRoutes = require('./routes/userManagementRoutes');
@@ -79,6 +80,7 @@ app.use('/api/inperson-complaints', inpersonComplaintsRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api', permissionsRoutes);
 app.use('/api/dept-admin', deptAdminRoutes);
+app.use('/api/employee', employeeRoutes);
 app.use('/api/overview', require('./routes/overviewRoutes'));
 app.use('/api/notifications', require('./routes/notificationsRoutes'));
 

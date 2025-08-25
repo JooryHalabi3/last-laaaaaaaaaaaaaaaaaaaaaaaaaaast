@@ -32,4 +32,7 @@ router.post('/submit', complaintController.checkUserPermissions, complaintContro
 // تحديث حالة الشكوى
 router.put('/update-status/:complaintId', complaintController.updateComplaintStatus);
 
+// تحويل الشكوى إلى قسم آخر
+router.put('/transfer/:complaintId', complaintController.checkUserPermissions, complaintController.transferComplaint);
+
 module.exports = router; 

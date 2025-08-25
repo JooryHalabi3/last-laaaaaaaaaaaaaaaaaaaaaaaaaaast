@@ -437,8 +437,37 @@ router.post('/complaints/:complaintId/assign', async (req, res) => {
 
     // Update the complaint assignment
     await pool.execute(`
-      UPDATE Complaints SET EmployeeID = ? WHERE ComplaintID = ?
-    `, [employeeId, complaintId]);
+      UPDATE Complaints SET AssignedTo = ?, AssignedBy = ?, AssignedAt = NOW() WHERE ComplaintID = ?
+    `, [employeeId, req.user.EmployeeID, complaintId]);
+
+    // Add to complaint history
+    try {
+      const [assignedEmployee] = await pool.execute(
+        'SELECT FullName FROM employees WHERE EmployeeID = ?',
+        [employeeId]
+      );
+      const employeeName = assignedEmployee[0]?.FullName || 'موظف غير معروف';
+      
+      await pool.execute(
+        'INSERT INTO complainthistory (ComplaintID, EmployeeID, Action, ActionDetails) VALUES (?, ?, ?, ?)',
+        [
+          complaintId,
+          req.user.EmployeeID,
+          'تعيين موظف',
+          `تم تعيين الشكوى للموظف: ${employeeName}`
+        ]
+      );
+    } catch (historyError) {
+      console.log('Cannot add history record:', historyError.message);
+    }
+
+    // Send notification about assignment
+    try {
+      const { notifyComplaintAssignment } = require('../utils/notificationUtils');
+      await notifyComplaintAssignment(complaintId, employeeId, req.user.EmployeeID);
+    } catch (notifError) {
+      console.log('Error sending assignment notification:', notifError.message);
+    }
 
     res.json({
       success: true,

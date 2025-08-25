@@ -947,6 +947,134 @@ const updateComplaintStatus = async (req, res) => {
   }
 };
 
+// تحويل الشكوى إلى قسم آخر
+const transferComplaint = async (req, res) => {
+  try {
+    const complaintId = req.params.complaintId;
+    const { newDepartmentId } = req.body;
+    
+    if (!newDepartmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'معرف القسم الجديد مطلوب'
+      });
+    }
+
+    // التحقق من وجود الشكوى
+    const [complaintResult] = await pool.execute(
+      'SELECT * FROM complaints WHERE ComplaintID = ?',
+      [complaintId]
+    );
+
+    if (complaintResult.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'الشكوى غير موجودة'
+      });
+    }
+
+    const complaint = complaintResult[0];
+    const oldDepartmentId = complaint.DepartmentID;
+
+    // التحقق من أن القسم الجديد مختلف عن القسم الحالي
+    if (oldDepartmentId === parseInt(newDepartmentId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'الشكوى موجودة بالفعل في هذا القسم'
+      });
+    }
+
+    // التحقق من وجود القسم الجديد
+    const [deptResult] = await pool.execute(
+      'SELECT DepartmentName FROM departments WHERE DepartmentID = ?',
+      [newDepartmentId]
+    );
+
+    if (deptResult.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'القسم المطلوب غير موجود'
+      });
+    }
+
+    const newDepartmentName = deptResult[0].DepartmentName;
+
+    // الحصول على معلومات القسم القديم
+    const [oldDeptResult] = await pool.execute(
+      'SELECT DepartmentName FROM departments WHERE DepartmentID = ?',
+      [oldDepartmentId]
+    );
+    const oldDepartmentName = oldDeptResult[0]?.DepartmentName || 'قسم غير معروف';
+
+    // تحديث القسم للشكوى وإلغاء التعيين الحالي للموظف
+    await pool.execute(
+      'UPDATE complaints SET DepartmentID = ?, AssignedTo = NULL, AssignedBy = NULL, AssignedAt = NULL WHERE ComplaintID = ?',
+      [newDepartmentId, complaintId]
+    );
+
+    // إضافة سجل في تاريخ الشكوى
+    try {
+      const employeeId = req.user?.EmployeeID;
+      await pool.execute(
+        'INSERT INTO complainthistory (ComplaintID, EmployeeID, Action, ActionDetails, OldValue, NewValue) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          complaintId,
+          employeeId,
+          'تحويل القسم',
+          `تم تحويل الشكوى من قسم "${oldDepartmentName}" إلى قسم "${newDepartmentName}"`,
+          oldDepartmentName,
+          newDepartmentName
+        ]
+      );
+    } catch (historyError) {
+      console.log('لا يمكن إضافة سجل التاريخ:', historyError.message);
+    }
+
+    // الحصول على اسم الموظف الذي قام بالتحويل للإشعار
+    let transferredByName = 'مستخدم غير معروف';
+    try {
+      const employeeId = req.user?.EmployeeID;
+      if (employeeId) {
+        const [empResult] = await pool.execute(
+          'SELECT FullName FROM employees WHERE EmployeeID = ?',
+          [employeeId]
+        );
+        if (empResult.length > 0) {
+          transferredByName = empResult[0].FullName;
+        }
+      }
+    } catch (empError) {
+      console.log('لا يمكن الحصول على اسم الموظف:', empError.message);
+    }
+
+    // إرسال إشعار عن التحويل
+    try {
+      const { notifyComplaintTransfer } = require('../utils/notificationUtils');
+      await notifyComplaintTransfer(complaintId, oldDepartmentName, newDepartmentName, transferredByName);
+    } catch (notifError) {
+      console.log('خطأ في إرسال إشعار التحويل:', notifError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'تم تحويل الشكوى بنجاح',
+      data: {
+        complaintId,
+        oldDepartment: oldDepartmentName,
+        newDepartment: newDepartmentName,
+        transferredBy: transferredByName
+      }
+    });
+
+  } catch (error) {
+    console.error('خطأ في تحويل الشكوى:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'حدث خطأ في الخادم' 
+    });
+  }
+};
+
 module.exports = {
   getDepartments,
   getComplaintTypes,
@@ -959,5 +1087,6 @@ module.exports = {
   upload,
   verifyPatientIdentity,
   updateComplaintStatus,
+  transferComplaint,
   checkUserPermissions
 };
