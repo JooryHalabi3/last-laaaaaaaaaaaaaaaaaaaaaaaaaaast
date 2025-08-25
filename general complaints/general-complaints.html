@@ -16,13 +16,15 @@
     <div class="header-content">
       <div class="header-title" data-ar="عُــــــونَك" data-en="AOUNAK">عُــــــونَك</div>
       <img src="/icon/hospital-logo.png" alt="شعار المستشفى" class="header-logo">
+      <button id="langToggle" class="lang-toggle-btn">
+  <img src="/icon/lang.png" alt="language" class="lang-icon" />
+  <span id="langText">العربية | English</span>
     </div>
   </header>
 
 <body>
   <div class="page-header">
-    <h2 class="page-title" data-ar="الشكاوى العامة - لوحة تحكم السوبر أدمن" data-en="General Complaints - Super Admin Dashboard">الشكاوى العامة - لوحة تحكم السوبر أدمن</h2>
-    <p class="page-subtitle" data-ar="يمكنك هنا استعراض جميع الشكاوى العامة وتحويلها بين الأقسام" data-en="Here you can view all general complaints and transfer them between departments">يمكنك هنا استعراض جميع الشكاوى العامة وتحويلها بين الأقسام</p>
+    <h2 class="page-title" data-ar="الشكاوى العامة" data-en="General Complaints">الشكاوى العامة</h2>
 
 <div class="back-button">
       <a href="#" onclick="goBack()">
@@ -50,6 +52,20 @@
            data-ar-placeholder="بحث برقم الشكوى أو اسم المريض"
            data-en-placeholder="Search by Complaint ID or Patient Name"
            class="search-box" />
+    <select class="dropdown">
+      <option data-ar="الحالة" data-en="Status">الحالة</option>
+      <option value="جديدة" data-ar="جديدة" data-en="New">جديدة</option>
+      <option value="قيد المراجعة" data-ar="قيد المراجعة" data-en="Under Review">قيد المراجعة</option>
+      <option value="قيد المعالجة" data-ar="قيد المعالجة" data-en="Under Processing">قيد المعالجة</option>
+      <option value="تم الحل" data-ar="تم الحل" data-en="Resolved">تم الحل</option>
+      <option value="مغلقة" data-ar="مغلقة" data-en="Closed">مغلقة</option>
+    </select>
+    <select class="dropdown">
+      <option data-ar="القسم" data-en="Department">القسم</option>
+    </select>
+    <select class="dropdown">
+      <option data-ar="نوع الشكوى" data-en="Complaint Type">نوع الشكوى</option>
+    </select>
   </div>
 </section>
 
@@ -61,8 +77,16 @@
   </section>
 
 <footer class="footer">
-  <!-- تم إزالة أزرار التصدير والطباعة للسوبر أدمن -->
-</footer>
+  <button id="exportBtn" class="export-btn export-page-btn">
+    <img src="/icon/excel.png" alt="Export Icon" />
+    <span data-ar="صفحة التصدير" data-en="Export Page">صفحة التصدير</span>
+  </button>
+
+    <button onclick="printPage()" class="export-btn print">
+      <img src="/icon/print.png" />
+      <span data-ar="طباعة" data-en="Print">طباعة</span>
+    </button>
+  </footer>
 
   <!-- نافذة تحويل الشكوى -->
   <div id="transferModal" class="modal-overlay" style="display:none;">
@@ -85,5 +109,35 @@
   </div>
 
   <script src="general-complaints.js"></script>
+  <script>
+  (function () {
+    // استخدمي نفس التخزين عندك: localStorage.user يحتوي RoleID
+    function redirectByRole() {
+      const user = JSON.parse(localStorage.getItem('user') || 'null');
+
+      const roleId = Number(user.RoleID || user.roleId);
+      if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
+      if (roleId === 2) return '/employee/employee-home.html';   // موظف
+      if (roleId === 3) return '/dept-admin/dept-admin.html';     // أدمن
+    }
+
+    // كل روابط "الصفحة الرئيسية" الموجودة في الشريط الجانبي
+    const homeLinks = document.querySelectorAll(
+      'aside .sidebar-menu a.menu-link[href$="/login/login.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
+    );
+
+    homeLinks.forEach(a => {
+      // خَلّي النقر يوجّه حسب الدور
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.location.href = redirectByRole();
+      });
+
+      // (اختياري) عدّلي الـ href الظاهر للـ Hover/Copy
+      a.setAttribute('href', redirectByRole());
+    });
+  })();
+</script>
+
 </body>
 </html>

@@ -15,24 +15,10 @@ function checkAuthentication() {
   return true;
 }
 
-// التحقق من صلاحيات الوصول للشكاوى العامة
-function checkGeneralComplaintsAccess() {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
-  const roleId = Number(user?.RoleID || user?.roleId);
-  
-  // فقط السوبر أدمن يمكنه الوصول للشكاوى العامة
-  if (roleId !== 1) {
-    alert('ليس لديك صلاحية للوصول للشكاوى العامة');
-    window.location.href = '/login/login.html';
-    return false;
-  }
-  
-  return true;
-}
-
 // متغيرات عامة
 let complaintsData = [];
-let currentComplaintIdForTransfer = null;
+let departments = [];
+let complaintTypes = [];
 
 // وظيفة لحساب الوقت النسبي
 function getRelativeTime(dateString) {
@@ -71,7 +57,45 @@ function updateRelativeTimes() {
   });
 }
 
-// تم إزالة الدوال غير المستخدمة للسوبر أدمن
+// تحديث عنوان الصفحة للمدير
+function updatePageTitleForAdmin() {
+  const pageTitle = document.querySelector('h1');
+  if (pageTitle) {
+    pageTitle.textContent = 'الشكاوي العامة';
+  }
+}
+
+// تحديث عنوان الصفحة للمستخدم العادي
+function updatePageTitleForUser() {
+  const pageTitle = document.querySelector('h1');
+  if (pageTitle) {
+    pageTitle.textContent = 'الشكاوي العامة';
+  }
+}
+
+// عرض رسالة للمستخدم عند عدم وجود شكاوي شخصية
+function updatePageForNoUserComplaints() {
+  const complaintsSection = document.querySelector('.complaints');
+  if (complaintsSection) {
+    complaintsSection.innerHTML = `
+      <div style="text-align: center; padding: 40px; background: #f8f9fa; border-radius: 10px; margin: 20px 0;">
+        <div style="font-size: 48px; margin-bottom: 20px;">📝</div>
+        <h3 style="color: #6c757d; margin-bottom: 15px;">لم تقم بتقديم أي شكاوي بعد</h3>
+        <p style="color: #6c757d; margin-bottom: 20px;">
+          يمكنك تقديم شكوى جديدة من خلال النقر على "تقديم شكوى جديدة" في الصفحة الرئيسية
+        </p>
+        <a href="/New complaint/Newcomplaint.html" style="
+          background: #007bff; 
+          color: white; 
+          padding: 10px 20px; 
+          text-decoration: none; 
+          border-radius: 5px;
+          display: inline-block;
+        ">تقديم شكوى جديدة</a>
+      </div>
+    `;
+  }
+}
 
 // جلب جميع الشكاوى
 async function loadComplaints() {
@@ -80,8 +104,11 @@ async function loadComplaints() {
     
     const dateFilter = document.getElementById('dateFilter').value;
     const searchTerm = document.querySelector('.search-box').value;
+    const statusFilter = document.querySelectorAll('.dropdown')[1].value;
+    const departmentFilter = document.querySelectorAll('.dropdown')[2].value;
+    const complaintTypeFilter = document.querySelectorAll('.dropdown')[3].value;
 
-    // إنشاء معاملات البحث
+    // إنشاء معاملات البحث مع تجاهل القيم الافتراضية
     const params = new URLSearchParams();
     
     if (dateFilter && dateFilter !== 'all') {
@@ -90,6 +117,18 @@ async function loadComplaints() {
     
     if (searchTerm && searchTerm.trim() !== '') {
       params.append('search', searchTerm.trim());
+    }
+    
+    if (statusFilter && statusFilter !== 'الحالة') {
+      params.append('status', statusFilter);
+    }
+    
+    if (departmentFilter && departmentFilter !== 'القسم') {
+      params.append('department', departmentFilter);
+    }
+    
+    if (complaintTypeFilter && complaintTypeFilter !== 'نوع الشكوى') {
+      params.append('complaintType', complaintTypeFilter);
     }
 
     console.log('معاملات البحث:', params.toString());
@@ -104,8 +143,14 @@ async function loadComplaints() {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // السوبر أدمن يرى جميع الشكاوى
-    const endpoint = '/complaints/all';
+    // تحديد المسار حسب نوع المستخدم
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    let endpoint = '/complaints/all'; // افتراضياً للمدير
+    
+    if (user.roleID === 2) {
+      // المستخدم العادي: استخدام endpoint الشخصي
+      endpoint = '/complaints/my-complaints';
+    }
 
     const response = await fetch(`${API_BASE_URL}${endpoint}?${params}`, {
       method: 'GET',
@@ -120,6 +165,18 @@ async function loadComplaints() {
       if (data.data && Array.isArray(data.data)) {
         complaintsData = data.data;
         console.log('عدد الشكاوى المحملة:', complaintsData.length);
+        
+        // تحديث العنوان
+        if (data.isAdmin) {
+          updatePageTitleForAdmin();
+        } else {
+          updatePageTitleForUser();
+          
+          // إذا لم يجد شكاوي، عرض رسالة مناسبة
+          if (complaintsData.length === 0) {
+            updatePageForNoUserComplaints();
+          }
+        }
         
         // التحقق من صحة البيانات
         complaintsData = complaintsData.filter(complaint => {
@@ -148,9 +205,60 @@ async function loadComplaints() {
   }
 }
 
-// تم إزالة دالة loadFilters للسوبر أدمن
+// جلب الأقسام وأنواع الشكاوى للفلاتر
+async function loadFilters() {
+  try {
+    // جلب الأقسام
+    const deptResponse = await fetch(`${API_BASE_URL}/complaints/departments`);
+    const deptData = await deptResponse.json();
+    
+    if (deptData.success) {
+      departments = deptData.data;
+      populateDepartmentFilter();
+    }
 
-// تم إزالة دوال الفلاتر غير المستخدمة للسوبر أدمن
+    // جلب أنواع الشكاوى
+    const typeResponse = await fetch(`${API_BASE_URL}/complaints/types`);
+    const typeData = await typeResponse.json();
+    
+    if (typeData.success) {
+      complaintTypes = typeData.data;
+      populateComplaintTypeFilter();
+    }
+  } catch (error) {
+    console.error('خطأ في جلب الفلاتر:', error);
+  }
+}
+
+// ملء فلتر الأقسام
+function populateDepartmentFilter() {
+  const departmentSelect = document.querySelectorAll('.dropdown')[2];
+  if (departmentSelect) {
+    departmentSelect.innerHTML = '<option data-ar="القسم" data-en="Department">القسم</option>';
+    
+    departments.forEach(dept => {
+      const option = document.createElement('option');
+      option.value = dept.DepartmentName;
+      option.textContent = dept.DepartmentName;
+      departmentSelect.appendChild(option);
+    });
+  }
+}
+
+// ملء فلتر أنواع الشكاوى
+function populateComplaintTypeFilter() {
+  const typeSelect = document.querySelectorAll('.dropdown')[3];
+  if (typeSelect) {
+    typeSelect.innerHTML = '<option data-ar="نوع الشكوى" data-en="Complaint Type">نوع الشكوى</option>';
+    
+    complaintTypes.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.TypeName;
+      option.textContent = type.TypeName;
+      typeSelect.appendChild(option);
+    });
+  }
+}
 
 // تحديث عرض الشكاوى
 function updateComplaintsDisplay() {
@@ -241,6 +349,10 @@ function updateComplaintsDisplay() {
               </div>
             </div>
             <div class="actions">
+              <a href="#" onclick="viewComplaintDetails(${complaint.ComplaintID})" class="btn blue" data-ar="عرض التفاصيل" data-en="View Details">عرض التفاصيل</a>
+              <a href="#" onclick="replyToComplaint(${complaint.ComplaintID})" class="btn green" data-ar="الرد على الشكوى" data-en="Reply to Complaint">الرد على الشكوى</a>
+              <a href="/general complaints/status.html" class="btn gray" data-ar="تغيير الحالة" data-en="Change Status">تغيير الحالة</a>
+              <a href="#" onclick="trackComplaint(${complaint.ComplaintID})" class="btn track" data-ar="تتبع حالة الشكوى" data-en="Track Complaint">تتبع حالة الشكوى</a>
               <a href="#" onclick="showTransferModal(${complaint.ComplaintID})" class="btn orange" data-ar="تحويل شكوى" data-en="Transfer Complaint">تحويل شكوى</a>
             </div>
           </div>
@@ -277,52 +389,211 @@ function getStatusText(status) {
   return status || 'جديدة';
 }
 
-// تم إزالة دالة viewComplaintDetails للسوبر أدمن
+// عرض تفاصيل الشكوى
+function viewComplaintDetails(complaintId) {
+  const complaint = complaintsData.find(c => c.ComplaintID === complaintId);
+  if (complaint) {
+    // حفظ بيانات الشكوى في localStorage للوصول إليها في صفحة التفاصيل
+    localStorage.setItem("selectedComplaint", JSON.stringify(complaint));
+    window.location.href = "/general complaints/details.html";
+  }
+}
 
-// تم إزالة دالة trackComplaint للسوبر أدمن
+function trackComplaint(complaintId) {
+  const complaint = complaintsData.find(c => c.ComplaintID === complaintId);
+  if (complaint) {
+    // التأكد من وجود البيانات الأساسية وإضافة إشارة لمصدر البيانات
+    const complaintToSave = {
+      ...complaint,
+      _dataSource: 'general-complaints',
+      _timestamp: Date.now()
+    };
+    
+    console.log('حفظ بيانات الشكوى للتتبع:', complaintToSave);
+    
+    // حفظ بيانات الشكوى في localStorage للوصول إليها في صفحة التتبع
+    localStorage.setItem("selectedComplaint", JSON.stringify(complaintToSave));
+    window.location.href = `/general complaints/track.html?complaint=${complaintId}`;
+  } else {
+    console.error('لم يتم العثور على الشكوى في البيانات المحملة');
+    alert('خطأ: لم يتم العثور على بيانات الشكوى');
+  }
+}
 
-// تم إزالة دالة replyToComplaint للسوبر أدمن
+function replyToComplaint(complaintId) {
+  const complaint = complaintsData.find(c => c.ComplaintID === complaintId);
+  if (complaint) {
+    // حفظ بيانات الشكوى في localStorage للوصول إليها في صفحة الرد
+    localStorage.setItem("selectedComplaint", JSON.stringify(complaint));
+    window.location.href = "/general complaints/reply.html";
+  }
+}
 
-// تم إزالة دالة applyFilters للسوبر أدمن
+// تطبيق الفلاتر
+function applyFilters() {
+  loadComplaints();
+}
 
 function goBack() {
   window.history.back();
 }
 
-// تم إزالة دالة printPage وأحداث التصدير للسوبر أدمن
+function printPage() {
+  window.print();
+}
+
+document.getElementById("exportBtn").addEventListener("click", function () {
+  // التوجيه إلى صفحة export.html داخل مجلد dashboard
+  window.location.href = "/dashboard/export.html";
+});
+
+// مراقبة تحديثات حالة الشكاوى
+function listenForStatusUpdates() {
+  // مراقبة تغيير localStorage
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'complaintStatusUpdated') {
+      const updateData = JSON.parse(e.newValue);
+      if (updateData && updateData.complaintId) {
+        console.log('تم اكتشاف تحديث حالة الشكوى:', updateData);
+        updateComplaintStatusInUI(updateData.complaintId, updateData.newStatus);
+      }
+    }
+  });
+
+  // مراقبة التحديثات في نفس النافذة
+  setInterval(() => {
+    const updateData = localStorage.getItem('complaintStatusUpdated');
+    if (updateData) {
+      const parsed = JSON.parse(updateData);
+      const timeDiff = Date.now() - parsed.timestamp;
+      
+      // إذا كان التحديث حديث (أقل من 5 ثواني) وليس من نفس الصفحة
+      if (timeDiff < 5000 && !window.complaintStatusUpdateProcessed) {
+        console.log('تم اكتشاف تحديث حالة محلي:', parsed);
+        updateComplaintStatusInUI(parsed.complaintId, parsed.newStatus);
+        window.complaintStatusUpdateProcessed = true;
+        
+        // إزالة العلامة بعد 10 ثواني
+        setTimeout(() => {
+          window.complaintStatusUpdateProcessed = false;
+        }, 10000);
+      }
+    }
+  }, 1000);
+}
 
 // تحديث حالة الشكوى في الواجهة
-// تم إزالة دالة updateComplaintStatusInUI للسوبر أدمن
+function updateComplaintStatusInUI(complaintId, newStatus) {
+  // البحث عن الشكوى في البيانات المحملة
+  const complaintIndex = complaintsData.findIndex(c => c.ComplaintID === complaintId);
+  if (complaintIndex !== -1) {
+    // تحديث البيانات
+    complaintsData[complaintIndex].CurrentStatus = newStatus;
+    
+    // إعادة عرض الشكاوى لتظهر التحديثات
+    updateComplaintsDisplay();
+    
+    console.log(`تم تحديث حالة الشكوى ${complaintId} إلى ${newStatus}`);
+  }
+}
 
-// تم إزالة متغير currentLang للسوبر أدمن
+let currentLang = localStorage.getItem('lang') || 'ar';
 
-// تم إزالة دالة applyLanguage للسوبر أدمن
+function applyLanguage(lang) {
+  currentLang = lang;
+  localStorage.setItem('lang', lang);
 
-// تم إزالة الأحداث غير المستخدمة للسوبر أدمن
+  // الاتجاه واللغة
+  document.documentElement.lang = lang;
+  document.body.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  document.body.style.textAlign = lang === 'ar' ? 'right' : 'left';
+
+  // تغيير النصوص بناءً على اللغة
+  document.querySelectorAll('[data-ar]').forEach(el => {
+    el.textContent = el.getAttribute(`data-${lang}`);
+  });
+
+  // تغيير placeholder بناءً على اللغة
+  document.querySelectorAll('[data-ar-placeholder]').forEach(el => {
+    el.placeholder = el.getAttribute(`data-${lang}-placeholder`);
+  });
+
+  // زر اللغة نفسه
+  const langText = document.getElementById('langText');
+  if (langText) {
+    langText.textContent = lang === 'ar' ? 'العربية | English' : 'English | العربية';
+  }
+
+  // تغيير الخط
+  document.body.style.fontFamily = lang === 'ar' ? "'Tajawal', sans-serif" : "serif";
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('تم تحميل صفحة الشكاوى العامة');
+  
+  // التحقق من تسجيل الدخول أولاً
+  if (!checkAuthentication()) {
+    return;
+  }
+  
+  applyLanguage(currentLang);
+
+  const toggleBtn = document.getElementById('langToggle');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const newLang = currentLang === 'ar' ? 'en' : 'ar';
+      applyLanguage(newLang);
+    });
+  }
+
+  // تحميل الفلاتر والشكاوى
+  console.log('بدء تحميل الفلاتر...'); // إضافة رسالة تصحيح
+  loadFilters();
+  
+  console.log('بدء تحميل الشكاوى...'); // إضافة رسالة تصحيح
+  loadComplaints();
+
+  // بدء مراقبة تحديثات الحالة
+  listenForStatusUpdates();
+  
+  // تحديث الأوقات النسبية كل دقيقة
+  setInterval(updateRelativeTimes, 60000); // 60 ثانية
+
+  // إضافة مستمعي الأحداث للفلاتر
+  const dateFilter = document.getElementById('dateFilter');
+  if (dateFilter) {
+    dateFilter.addEventListener('change', applyFilters);
+  }
+
+  const searchBox = document.querySelector('.search-box');
+  if (searchBox) {
+    searchBox.addEventListener('input', applyFilters);
+  }
+
+  const dropdowns = document.querySelectorAll('.dropdown');
+  dropdowns.forEach(dropdown => {
+    dropdown.addEventListener('change', applyFilters);
+  });
+  
+  console.log('تم إعداد جميع الأحداث بنجاح'); // إضافة رسالة تصحيح
+});
 
 // دوال تحويل الشكوى
+
+let currentComplaintIdForTransfer = null;
 
 // عرض نافذة تحويل الشكوى
 function showTransferModal(complaintId) {
     currentComplaintIdForTransfer = complaintId;
     
-    const modal = document.getElementById('transferModal');
-    const modalBody = modal.querySelector('.modal-body');
-    
-    // السوبر أدمن - تحويل على الأقسام فقط
-    modalBody.innerHTML = `
-        <p data-ar="اختر القسم الذي تريد تحويل الشكوى إليه:" data-en="Select the department to transfer the complaint to:">اختر القسم الذي تريد تحويل الشكوى إليه:</p>
-        <select id="transferDepartmentSelect" class="transfer-select">
-            <option value="" data-ar="اختر القسم" data-en="Select Department">اختر القسم</option>
-        </select>
-        <div class="modal-actions">
-            <button onclick="transferComplaint()" class="btn blue" data-ar="تحويل" data-en="Transfer">تحويل</button>
-            <button onclick="closeTransferModal()" class="btn gray" data-ar="إلغاء" data-en="Cancel">إلغاء</button>
-        </div>
-    `;
+    // ملء قائمة الأقسام
     populateTransferDepartments();
     
-    modal.style.display = 'flex';
+    // عرض النافذة
+    const modal = document.getElementById('transferModal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
 }
 
 // إغلاق نافذة تحويل الشكوى
@@ -342,25 +613,16 @@ function populateTransferDepartments() {
     // مسح الخيارات السابقة
     select.innerHTML = '<option value="" data-ar="اختر القسم" data-en="Select Department">اختر القسم</option>';
     
-    // جلب الأقسام من الباك إند
-    fetch(`${API_BASE_URL}/complaints/departments`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.data) {
-                data.data.forEach(dept => {
-                    const option = document.createElement('option');
-                    option.value = dept.DepartmentID;
-                    option.textContent = dept.DepartmentName;
-                    select.appendChild(option);
-                });
-            }
-        })
-        .catch(error => {
-            console.error('خطأ في جلب الأقسام:', error);
+    // إضافة الأقسام من البيانات المحملة
+    if (departments && Array.isArray(departments)) {
+        departments.forEach(dept => {
+            const option = document.createElement('option');
+            option.value = dept.DepartmentID;
+            option.textContent = dept.DepartmentName;
+            select.appendChild(option);
         });
+    }
 }
-
-// تم إزالة دالة populateTransferEmployees للسوبر أدمن
 
 // تحويل الشكوى إلى قسم آخر
 async function transferComplaint() {
@@ -419,15 +681,8 @@ async function transferComplaint() {
     }
 }
 
-// تم إزالة دالة transferComplaintToEmployee للسوبر أدمن
-
 // إغلاق النافذة عند النقر خارجها
 document.addEventListener('DOMContentLoaded', function() {
-    // التحقق من الصلاحيات أولاً
-    if (!checkAuthentication() || !checkGeneralComplaintsAccess()) {
-        return;
-    }
-
     const modal = document.getElementById('transferModal');
     if (modal) {
         modal.addEventListener('click', function(e) {
@@ -436,12 +691,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-
-    // تحميل البيانات
-    loadComplaints();
-    
-    // تحديث الأوقات النسبية كل دقيقة
-    setInterval(updateRelativeTimes, 60000);
 });
 
 
