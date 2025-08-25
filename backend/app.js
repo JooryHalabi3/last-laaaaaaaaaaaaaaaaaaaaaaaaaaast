@@ -21,6 +21,7 @@ const deptAdminRoutes = require('./routes/deptAdminRoutes');
 const db = require('./config/database');
 const { setupEmployeesTable } = require('./controllers/authController');
 const userManagementRoutes = require('./routes/userManagementRoutes');
+const notificationsRoutes = require('./routes/notificationsRoutes');
 
 
 
@@ -68,6 +69,7 @@ app.use('/api/logs', logsRoutes);
 app.use('/api', permissionsRoutes);
 app.use('/api/dept-admin', deptAdminRoutes);
 app.use('/api/overview', require('./routes/overviewRoutes'));
+app.use('/api/notifications', require('./routes/notificationsRoutes'));
 
 app.use(
     '/api/admin/users',

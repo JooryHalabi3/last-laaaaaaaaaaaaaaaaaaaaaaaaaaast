@@ -1,5 +1,171 @@
 // ===== إعدادات عامة =====
 const API_BASE_URL = 'http://localhost:3001/api';   // عدّليها لو لزم
+// ===== إشعارات السوبر أدمن (توافق مع HTML: notifBtn / notifCount) =====
+const NOTIF_POLL_MS = 30000;
+
+function ensureNotifMenu(anchorBtn) {
+  // نبني القائمة على الطاير إذا ما كانت موجودة
+  let menu = document.getElementById('notifMenu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'notifMenu';
+    menu.style.cssText = `
+      display:none; position:absolute; width:360px; max-height:420px; overflow:auto;
+      background:#fff; border:1px solid #eee; border-radius:10px; box-shadow:0 10px 20px rgba(0,0,0,.08); z-index:9999;
+    `;
+    // هيدر
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #f1f1f1;';
+    const title = document.createElement('strong');
+    title.textContent = 'الإشعارات';
+    const markAll = document.createElement('button');
+    markAll.textContent = 'تحديد الكل كمقروء';
+    markAll.className = 'text-btn';
+    markAll.onclick = markAllAsRead;
+    header.append(title, markAll);
+
+    // قائمة
+    const list = document.createElement('ul');
+    list.id = 'notifList';
+    list.style.cssText = 'list-style:none;margin:0;padding:0;';
+
+    menu.append(header, list);
+    document.body.appendChild(menu);
+
+    // إغلاق عند الضغط خارج القائمة
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && !anchorBtn.contains(e.target)) {
+        menu.style.display = 'none';
+      }
+    });
+  }
+  // تموضع بجانب زر الجرس
+  const rect = anchorBtn.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + window.scrollY + 8}px`;
+  menu.style.left = `${rect.right - 360 + window.scrollX}px`; // يحاذي اليمين
+  return menu;
+}
+
+async function refreshNotifBadge() {
+  try {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${API_BASE_URL}/notifications/count?status=unread`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    const count = Number(data?.count || 0);
+    const badge = document.getElementById('notifCount');
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = String(count);
+      badge.style.display = 'inline-flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (e) {
+    // تجاهل بس لا تكسر الصفحة
+  }
+}
+
+async function loadNotificationsList() {
+  const token = localStorage.getItem('token');
+  const res = await fetch(`${API_BASE_URL}/notifications?status=all&limit=20`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await res.json();
+  const list = document.getElementById('notifList');
+  if (!list) return;
+
+  list.innerHTML = '';
+  const items = Array.isArray(data?.data) ? data.data : [];
+  if (!items.length) {
+    const li = document.createElement('li');
+    li.style.padding = '12px';
+    li.textContent = 'لا توجد إشعارات';
+    list.appendChild(li);
+    return;
+  }
+
+  items.forEach(n => {
+    const li = document.createElement('li');
+    li.style.cssText = 'padding:10px 12px;border-bottom:1px solid #f7f7f7;';
+    li.style.background = n.IsRead ? '#fff' : '#f9fafb';
+
+    const title = document.createElement('div');
+    title.style.fontWeight = '600';
+    title.textContent = n.Title || 'إشعار';
+
+    const body = document.createElement('div');
+    body.style.cssText = 'font-size:12px;opacity:.9;margin-top:2px;';
+    body.textContent = n.Body || '';
+
+    const meta = document.createElement('div');
+    meta.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+
+    // زر فتح (لو فيه رابط لاحقًا RelatedType/RelatedID تقدري تبنينه)
+    const openBtn = document.createElement('button');
+    openBtn.className = 'text-btn';
+    openBtn.textContent = 'فتح';
+    openBtn.onclick = async () => {
+      if (!n.IsRead) await markAsRead(n.NotificationID, false);
+      // TODO: وجّهي حسب نوع/رابط الإشعار لو متوفر
+    };
+
+    const readBtn = document.createElement('button');
+    readBtn.className = 'text-btn';
+    readBtn.textContent = n.IsRead ? 'مقروء' : 'تحديد كمقروء';
+    readBtn.disabled = !!n.IsRead;
+    readBtn.onclick = async () => { await markAsRead(n.NotificationID, true); };
+
+    meta.append(openBtn, readBtn);
+    li.append(title, body, meta);
+    list.appendChild(li);
+  });
+}
+
+async function markAsRead(id, refreshList = true) {
+  try {
+    const token = localStorage.getItem('token');
+    await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    await refreshNotifBadge();
+    if (refreshList) await loadNotificationsList();
+  } catch (e) {}
+}
+
+async function markAllAsRead() {
+  try {
+    const token = localStorage.getItem('token');
+    await fetch(`${API_BASE_URL}/notifications/read-all`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    await refreshNotifBadge();
+    await loadNotificationsList();
+  } catch (e) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // حماية الصفحة حسب RoleID=1
+  if (!requireSuperAdmin()) return;
+
+  const notifBtn = document.getElementById('notifBtn');
+  if (notifBtn) {
+    notifBtn.addEventListener('click', async () => {
+      const menu = ensureNotifMenu(notifBtn);
+      // تبديل الظهور
+      const open = menu.style.display === 'block';
+      menu.style.display = open ? 'none' : 'block';
+      if (!open) await loadNotificationsList();
+    });
+  }
+
+  // حمّل عدّاد الإشعارات واشتغل Polling
+  refreshNotifBadge();
+  setInterval(refreshNotifBadge, NOTIF_POLL_MS);
+});
 
 let currentLang = localStorage.getItem('lang') || 'ar';
 function guard(){
