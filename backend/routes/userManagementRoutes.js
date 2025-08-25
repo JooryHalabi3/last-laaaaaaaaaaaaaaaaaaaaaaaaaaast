@@ -18,8 +18,7 @@ router.put('/:id/role', authenticateToken, controller.updateUserRole);
 router.delete('/:id', authenticateToken, controller.deleteUser);
 
 // سويتش يوزر (Impersonate)
-router.post('/impersonate/:id', authenticateToken, controller.impersonateUser);
-
+router.post('/:id/impersonate', authenticateToken, controller.impersonateUser);
 // إنهاء السويتش يوزر
 router.post('/impersonate/end', authenticateToken, controller.endImpersonation);
 

@@ -3,8 +3,7 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 const { authenticateToken } = require('./middleware/auth');
-const requireRole = require('./middleware/requireRole'); // الديفولت المصدَّر هو الدالة الأولى
-const userManagementRoutes = require('./routes/userManagementRoutes');
+const { requireRole } = require('./middleware/requireRole');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -24,6 +23,7 @@ const { setupEmployeesTable } = require('./controllers/authController');
 const userManagementRoutes = require('./routes/userManagementRoutes');
 
 
+
 const app = express();
 
 // Middleware
@@ -39,6 +39,7 @@ app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
     next();
 });
+
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -67,9 +68,13 @@ app.use('/api/logs', logsRoutes);
 app.use('/api', permissionsRoutes);
 app.use('/api/dept-admin', deptAdminRoutes);
 app.use('/api/overview', require('./routes/overviewRoutes'));
-app.use('/api/admin/users', userManagementRoutes);
 
-
+app.use(
+    '/api/admin/users',
+    authenticateToken,
+    requireRole(1),
+    userManagementRoutes
+  );
 
 // 404 handler
 app.use((req, res) => {
@@ -161,3 +166,4 @@ app.listen(PORT, async () => {
     await setupEmployeesTable();
 }); 
 // Import routes
+module.exports = app;
