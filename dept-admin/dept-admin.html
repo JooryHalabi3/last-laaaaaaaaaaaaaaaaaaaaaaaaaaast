@@ -90,7 +90,7 @@
         <img src="/icon/list.png" alt="">
         <h3 data-ar="شكاوى القسم" data-en="Department Complaints">شكاوى القسم</h3>
         <p data-ar="عرض وإدارة شكاوى القسم" data-en="View and manage department complaints">عرض وإدارة شكاوى القسم</p>
-        <a href="/general complaints/general-complaints.html" class="btn" data-ar="عرض الشكاوى" data-en="View Complaints">عرض الشكاوى</a>
+        <a href="/dept-admin/department-complaints.html" class="btn" data-ar="عرض الشكاوى" data-en="View Complaints">عرض الشكاوى</a>
       </div>
 
       <div class="card">
@@ -427,14 +427,15 @@
    <script>
    (function () {
      // استخدمي نفس التخزين عندك: localStorage.user يحتوي RoleID
-     function redirectByRole() {
-       const user = JSON.parse(localStorage.getItem('user') || 'null');
-
-       const roleId = Number(user.RoleID || user.roleId);
-       if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
-       if (roleId === 2) return '/employee/employee-home.html';   // موظف
-       if (roleId === 3) return '/dept-admin/dept-admin.html';     // أدمن
-     }
+      function redirectByRole() {
+      const user = JSON.parse(localStorage.getItem('user') || 'null');
+      if (!user) return '/login/login.html';
+      const roleId = Number(user.RoleID || user.roleId);
+      if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
+      if (roleId === 2) return '/employee/employee-home.html';   // موظف
+      if (roleId === 3) return '/dept-admin/dept-admin.html';  
+      return '/login/login.html'; // احتياطي
+    }
 
      // كل روابط "الصفحة الرئيسية" الموجودة في الشريط الجانبي
      const homeLinks = document.querySelectorAll(

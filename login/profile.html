@@ -92,15 +92,14 @@ n<!DOCTYPE html>
   <script>
   (function () {
     // استخدمي نفس التخزين عندك: localStorage.user يحتوي RoleID
-    function redirectByRole() {
+   function redirectByRole() {
       const user = JSON.parse(localStorage.getItem('user') || 'null');
-      if (!user) return '/home/home.html';
-
+      if (!user) return '/login/login.html';
       const roleId = Number(user.RoleID || user.roleId);
       if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
       if (roleId === 2) return '/employee/employee-home.html';   // موظف
-      if (roleId === 3) return '/dept-admin/dept-admin.html';      // أدمن
-      return '/home/home.html'; // احتياطي
+      if (roleId === 3) return '/dept-admin/dept-admin.html';  
+      return '/login/login.html'; // احتياطي
     }
 
     // كل روابط "الصفحة الرئيسية" الموجودة في الشريط الجانبي

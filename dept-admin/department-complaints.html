@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>شكاوى القسم</title>
+
+  <!-- خطوط مثل صفحة الجينيرال -->
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="department-complaints.css" />
+</head>
+
+<!-- Header مثل general -->
+<header class="header">
+  <div class="header-content">
+    <div class="header-title" data-ar="عُــــــونَك" data-en="AOUNAK">عُــــــونَك</div>
+    <img src="/icon/hospital-logo.png" alt="شعار المستشفى" class="header-logo">
+    <button id="langToggle" class="lang-toggle-btn">
+      <img src="/icon/lang.png" alt="language" class="lang-icon" />
+      <span id="langText">العربية | English</span>
+    </button>
+  </div>
+</header>
+
+<body>
+  <div class="page-header">
+    <h2 class="page-title" data-ar="شكاوى القسم" data-en="Department Complaints">شكاوى القسم</h2>
+    <div class="back-button">
+      <a href="#" id="backBtn">
+        <img src="/icon/Back.png" alt="Back Icon" class="back-icon" />
+        <span data-ar="عودة" data-en="Back">عودة</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- أدوات السوبر أدمن لاختيار قسم -->
+  <div id="superadminTools" class="superadmin-tools" style="display:none;">
+    <label class="label" data-ar="اختر القسم" data-en="Select Department">اختر القسم</label>
+    <input type="number" id="deptInput" placeholder="DepartmentID" />
+    <button id="applyDept" class="apply-btn" data-ar="تطبيق" data-en="Apply">تطبيق</button>
+    <div class="hint" data-ar="اتركه فارغًا لاستخدام قسمك تلقائيًا" data-en="Leave blank to use your department automatically">
+      اتركه فارغًا لاستخدام قسمك تلقائيًا
+    </div>
+  </div>
+
+  <!-- Filters (مشابهة للجينيرال) -->
+  <section class="filters">
+    <div class="row">
+      <select class="dropdown" id="dateFilter">
+        <option value="all" data-ar="الكل" data-en="All" selected>الكل</option>
+        <option value="30" data-ar="آخر 30 يوم" data-en="Last 30 Days">آخر 30 يوم</option>
+        <option value="7" data-ar="آخر 7 أيام" data-en="Last 7 Days">آخر 7 أيام</option>
+        <option value="3" data-ar="آخر 3 أيام" data-en="Last 3 Days">آخر 3 أيام</option>
+      </select>
+      <input type="text" id="searchBox"
+             placeholder="بحث برقم الشكوى أو العنوان"
+             data-ar-placeholder="بحث برقم الشكوى أو العنوان"
+             data-en-placeholder="Search by Complaint # or Title"
+             class="search-box" />
+      <select class="dropdown" id="statusFilter">
+        <option value="" data-ar="الحالة" data-en="Status">الحالة</option>
+        <option value="جديدة" data-ar="جديدة" data-en="New">جديدة</option>
+        <option value="قيد المراجعة" data-ar="قيد المراجعة" data-en="Under Review">قيد المراجعة</option>
+        <option value="قيد المعالجة" data-ar="قيد المعالجة" data-en="Under Processing">قيد المعالجة</option>
+        <option value="تم الحل" data-ar="تم الحل" data-en="Resolved">تم الحل</option>
+        <option value="مغلقة" data-ar="مغلقة" data-en="Closed">مغلقة</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- قائمة الشكاوى -->
+  <section class="complaints" id="cards"></section>
+
+  <!-- Empty/Error -->
+  <div id="empty" class="no-complaints" style="display:none;">
+    <p data-ar="لا توجد شكاوى لهذا القسم" data-en="No complaints for this department">لا توجد شكاوى لهذا القسم</p>
+  </div>
+  <div id="errorBox" class="no-complaints" style="display:none;">
+    <p id="errorText">خطأ</p>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <button id="exportBtn" class="export-btn export-page-btn">
+      <img src="/icon/excel.png" alt="Export Icon" />
+      <span data-ar="صفحة التصدير" data-en="Export Page">صفحة التصدير</span>
+    </button>
+    <button id="printBtn" class="export-btn print">
+      <img src="/icon/print.png" alt="Print Icon" />
+      <span data-ar="طباعة" data-en="Print">طباعة</span>
+    </button>
+  </footer>
+
+  <!-- نافذة تحويل الشكوى -->
+  <div id="transferModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 data-ar="تحويل الشكوى" data-en="Transfer Complaint">تحويل الشكوى</h3>
+        <button id="closeTransferModal" class="close-modal">×</button>
+      </div>
+      <div class="modal-body">
+        <p data-ar="اختر القسم الذي تريد تحويل الشكوى إليه:" data-en="Select the department to transfer the complaint to:">
+          اختر القسم الذي تريد تحويل الشكوى إليه:
+        </p>
+        <select id="transferDepartmentSelect" class="transfer-select">
+          <option value="" data-ar="اختر القسم" data-en="Select Department">اختر القسم</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button id="doTransferBtn" class="btn blue" data-ar="تحويل" data-en="Transfer">تحويل</button>
+        <button id="cancelTransferBtn" class="btn gray" data-ar="إلغاء" data-en="Cancel">إلغاء</button>
+      </div>
+    </div>
+  </div>
+<script>
+  (function () {
+    // استخدمي نفس التخزين عندك: localStorage.user يحتوي RoleID
+    function redirectByRole() {
+      const user = JSON.parse(localStorage.getItem('user') || 'null');
+      if (!user) return '/login/login.html';
+
+      const roleId = Number(user.RoleID || user.roleId);
+      if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
+      if (roleId === 2) return '/employee/employee-home.html';   // موظف
+      if (roleId === 3) return '/dept-admin/dept-admin.html';      // أدمن
+      return '/login/login.html'; // احتياطي
+    }
+
+    // كل روابط "الصفحة الرئيسية" الموجودة في الشريط الجانبي
+    const homeLinks = document.querySelectorAll(
+      'aside .sidebar-menu a.menu-link[href$="/login/login.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
+    );
+
+    homeLinks.forEach(a => {
+      // خَلّي النقر يوجّه حسب الدور
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.location.href = redirectByRole();
+      });
+
+      // (اختياري) عدّلي الـ href الظاهر للـ Hover/Copy
+      a.setAttribute('href', redirectByRole());
+    });
+  })();
+</script>
+  <script src="department-complaints.js"></script>
+</body>
+</html>
