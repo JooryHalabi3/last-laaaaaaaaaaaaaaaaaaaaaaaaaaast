@@ -947,6 +947,81 @@ const updateComplaintStatus = async (req, res) => {
   }
 };
 
+// تحويل الشكوى إلى قسم آخر (سوبر أدمن فقط)
+const { notifyComplaintTransfer } = require('../utils/notificationUtils');
+const transferComplaintToDepartment = async (req, res) => {
+  try {
+    const { complaintId } = req.params;
+    const { newDepartmentId } = req.body;
+
+    if (!req.user || Number(req.user.RoleID || req.user.roleID) !== 1) {
+      return res.status(403).json({ success: false, message: 'يسمح للسوبر أدمن فقط بالتحويل' });
+    }
+
+    if (!complaintId || !newDepartmentId) {
+      return res.status(400).json({ success: false, message: 'معرف الشكوى والقسم الجديد مطلوبان' });
+    }
+
+    // احصل على القسم الحالي واسمائه
+    const [[current]] = await pool.execute(
+      `SELECT c.ComplaintID, c.DepartmentID, d.DepartmentName
+       FROM Complaints c
+       LEFT JOIN Departments d ON d.DepartmentID = c.DepartmentID
+       WHERE c.ComplaintID = ?
+       LIMIT 1`,
+      [complaintId]
+    );
+    if (!current) {
+      return res.status(404).json({ success: false, message: 'الشكوى غير موجودة' });
+    }
+
+    const [[toDept]] = await pool.execute(
+      `SELECT DepartmentID, DepartmentName FROM Departments WHERE DepartmentID = ? LIMIT 1`,
+      [newDepartmentId]
+    );
+    if (!toDept) {
+      return res.status(404).json({ success: false, message: 'القسم المستهدف غير موجود' });
+    }
+
+    // نفّذ التحويل: حدّث DepartmentID وأزل الإسناد الحالي إلى موظف (إن وُجد)
+    await pool.execute(
+      `UPDATE Complaints SET DepartmentID = ?, AssignedTo = NULL, AssignedBy = NULL, AssignedAt = NULL WHERE ComplaintID = ?`,
+      [toDept.DepartmentID, complaintId]
+    );
+
+    // أضف سجل في التاريخ
+    try {
+      await pool.execute(
+        `INSERT INTO ComplaintHistory (ComplaintID, EmployeeID, Stage, Remarks, OldStatus, NewStatus)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          complaintId,
+          req.user.EmployeeID || null,
+          'تحويل الشكوى',
+          `تحويل من قسم "${current.DepartmentName || current.DepartmentID}" إلى "${toDept.DepartmentName}"`,
+          '—',
+          '—'
+        ]
+      );
+    } catch (e) { /* جدول التاريخ قد لا يكون موجوداً */ }
+
+    // إشعار السوبر أدمن
+    try {
+      await notifyComplaintTransfer(
+        Number(complaintId),
+        current.DepartmentName || String(current.DepartmentID),
+        toDept.DepartmentName,
+        req.user.FullName || req.user.Username || 'Super Admin'
+      );
+    } catch (e) {}
+
+    return res.json({ success: true, message: 'تم تحويل الشكوى إلى القسم الجديد بنجاح' });
+  } catch (error) {
+    console.error('خطأ في تحويل الشكوى:', error);
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
+  }
+};
+
 module.exports = {
   getDepartments,
   getComplaintTypes,
@@ -959,5 +1034,6 @@ module.exports = {
   upload,
   verifyPatientIdentity,
   updateComplaintStatus,
-  checkUserPermissions
+  checkUserPermissions,
+  transferComplaintToDepartment
 };

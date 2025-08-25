@@ -493,6 +493,8 @@ async function impersonate(id) {
 
     // Decide destination based on role
     const roleId = data.user ? Number(data.user.RoleID) : parseJwtRoleId(data.token);
+    // احفظ بيانات الهدف لعرضها للسوبر أدمن لاحقاً
+    try { localStorage.setItem('impersonatedUserProfile', JSON.stringify(data.user || {})); } catch {}
     window.location.href = homePathForRole(roleId);
   } catch (e) {
     alert(e.message || 'Impersonation failed');

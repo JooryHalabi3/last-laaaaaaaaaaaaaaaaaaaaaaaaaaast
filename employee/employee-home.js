@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // وأيضًا فقط إذا الدور الحالي مو SUPER_ADMIN
     if (rootToken && user?.RoleID !== 1) {
       showReturnToSuperAdminButton();
+      showImpersonationBanner();
     }
   } catch (err) {
     console.error('Error checking impersonation state:', err);
@@ -47,6 +48,29 @@ function showReturnToSuperAdminButton() {
   };
 
   document.body.appendChild(btn);
+}
+
+function showImpersonationBanner(){
+  try {
+    const banner = document.getElementById('impersonation-banner');
+    const endBtn = document.getElementById('end-impersonation-btn');
+    const rootToken = localStorage.getItem('rootToken');
+    if (!banner || !rootToken) return;
+    banner.style.display = 'block';
+    if (endBtn) {
+      endBtn.onclick = () => {
+        const rootToken = localStorage.getItem('rootToken');
+        const rootUser = localStorage.getItem('rootUser');
+        if (rootToken && rootUser) {
+          localStorage.setItem('token', rootToken);
+          localStorage.setItem('user', rootUser);
+          localStorage.removeItem('rootToken');
+          localStorage.removeItem('rootUser');
+          window.location.href = '/superadmin/superadmin-home.html';
+        }
+      };
+    }
+  } catch {}
 }
 
 
