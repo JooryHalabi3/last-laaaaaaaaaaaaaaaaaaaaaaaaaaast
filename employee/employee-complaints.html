@@ -3,16 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>متابعة الشكاوى - الموظف</title>
-    <link rel="stylesheet" href="employee-followup.css">
+    <title>الشكاوى المسندة - الموظف</title>
+    <link rel="stylesheet" href="employee-complaints.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
     <!-- Header -->
     <header class="header">
         <div class="header-content">
-            <div class="header-title" data-ar="عُــــــونَك" data-en="AOUNAK">عُــــــونَك</div>
-            <img src="../icon/hospital-logo.png" alt="شعار المستشفى" class="header-logo">
+            <div class="header-left">
+                <div class="header-title">عُــــــونَك - الشكاوى المسندة</div>
+            </div>
+            
+            <div class="header-center">
+                <img src="../icon/hospital-logo.png" alt="شعار المستشفى" class="header-logo">
+            </div>
+            
             <div class="header-right">
                 <div class="notifications">
                     <i class="fas fa-bell" id="notificationIcon"></i>
@@ -54,14 +60,14 @@
                 الصفحة الرئيسية
             </a>
             <i class="fas fa-chevron-left"></i>
-            <span>متابعة الشكاوى</span>
+            <span>الشكاوى المسندة</span>
         </nav>
 
         <!-- Page Header -->
         <div class="page-header">
             <div class="page-title">
-                <i class="fas fa-list-alt"></i>
-                <h1>متابعة الشكاوى</h1>
+                <i class="fas fa-tasks"></i>
+                <h1>الشكاوى المسندة إليك</h1>
             </div>
             <div class="page-actions">
                 <button class="btn btn-primary" id="newComplaintBtn">
@@ -89,37 +95,25 @@
                         <label for="statusFilter">الحالة</label>
                         <select id="statusFilter">
                             <option value="">جميع الحالات</option>
-                            <option value="مفتوحة/جديدة">مفتوحة/جديدة</option>
+                            <option value="جديدة">جديدة</option>
                             <option value="قيد المعالجة">قيد المعالجة</option>
-                            <option value="معلقة">معلقة</option>
-                            <option value="مكتملة">مكتملة</option>
+                            <option value="قيد المراجعة">قيد المراجعة</option>
+                            <option value="تم الحل">تم الحل</option>
                             <option value="مغلقة">مغلقة</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label for="categoryFilter">الفئة</label>
-                        <select id="categoryFilter">
-                            <option value="">جميع الفئات</option>
-                            <option value="خدمة طبية">خدمة طبية</option>
-                            <option value="خدمة إدارية">خدمة إدارية</option>
-                            <option value="نظافة">نظافة</option>
-                            <option value="أمن وسلامة">أمن وسلامة</option>
-                            <option value="تجهيزات طبية">تجهيزات طبية</option>
-                            <option value="موظفين">موظفين</option>
-                            <option value="أخرى">أخرى</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label for="typeFilter">النوع</label>
-                        <select id="typeFilter">
-                            <option value="">جميع الشكاوى</option>
-                            <option value="my">شكاوىي</option>
-                            <option value="assigned">المسندة لي</option>
+                        <label for="priorityFilter">الأولوية</label>
+                        <select id="priorityFilter">
+                            <option value="">جميع الأولويات</option>
+                            <option value="عالية">عالية</option>
+                            <option value="متوسطة">متوسطة</option>
+                            <option value="منخفضة">منخفضة</option>
                         </select>
                     </div>
                     <div class="filter-group">
                         <label for="searchInput">البحث</label>
-                        <input type="text" id="searchInput" placeholder="ابحث في العنوان أو الوصف...">
+                        <input type="text" id="searchInput" placeholder="ابحث في تفاصيل الشكوى...">
                     </div>
                 </div>
             </div>
@@ -134,25 +128,7 @@
                     </div>
                     <div class="stat-content">
                         <h3 id="totalCount">0</h3>
-                        <p>إجمالي الشكاوى</p>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <i class="fas fa-user-edit"></i>
-                    </div>
-                    <div class="stat-content">
-                        <h3 id="myCount">0</h3>
-                        <p>شكاوىي</p>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <i class="fas fa-tasks"></i>
-                    </div>
-                    <div class="stat-content">
-                        <h3 id="assignedCount">0</h3>
-                        <p>المسندة لي</p>
+                        <p>إجمالي المسندة</p>
                     </div>
                 </div>
                 <div class="stat-card">
@@ -162,6 +138,24 @@
                     <div class="stat-content">
                         <h3 id="pendingCount">0</h3>
                         <p>قيد المعالجة</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3 id="completedCount">0</h3>
+                        <p>مكتملة</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3 id="urgentCount">0</h3>
+                        <p>عاجلة</p>
                     </div>
                 </div>
             </div>
@@ -178,9 +172,8 @@
                     <select id="sortBy">
                         <option value="newest">الأحدث</option>
                         <option value="oldest">الأقدم</option>
-                        <option value="title">العنوان</option>
-                        <option value="status">الحالة</option>
                         <option value="priority">الأولوية</option>
+                        <option value="status">الحالة</option>
                     </select>
                 </div>
             </div>
@@ -243,12 +236,82 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-primary" id="openComplaintBtn">فتح الشكوى</button>
+                <button class="btn btn-primary" id="respondBtn">إضافة رد</button>
+                <button class="btn btn-secondary" id="updateStatusBtn">تحديث الحالة</button>
                 <button class="btn btn-secondary" id="closeDetailsBtn">إغلاق</button>
             </div>
         </div>
     </div>
 
-    <script src="employee-followup.js"></script>
+    <!-- Response Modal -->
+    <div class="modal" id="responseModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-reply"></i>
+                    إضافة رد
+                </h3>
+                <button class="close-modal" id="closeResponseModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="responseText">الرد:</label>
+                    <textarea id="responseText" rows="4" placeholder="اكتب ردك هنا..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="responseType">نوع الرد:</label>
+                    <select id="responseType">
+                        <option value="رد رسمي">رد رسمي</option>
+                        <option value="اعتذار">اعتذار</option>
+                        <option value="توضيح">توضيح</option>
+                        <option value="متابعة">متابعة</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="submitResponseBtn">إرسال الرد</button>
+                <button class="btn btn-secondary" id="cancelResponseBtn">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Update Modal -->
+    <div class="modal" id="statusModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-edit"></i>
+                    تحديث الحالة
+                </h3>
+                <button class="close-modal" id="closeStatusModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="newStatus">الحالة الجديدة:</label>
+                    <select id="newStatus">
+                        <option value="جديدة">جديدة</option>
+                        <option value="قيد المعالجة">قيد المعالجة</option>
+                        <option value="قيد المراجعة">قيد المراجعة</option>
+                        <option value="تم الحل">تم الحل</option>
+                        <option value="مغلقة">مغلقة</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="statusRemarks">ملاحظات:</label>
+                    <textarea id="statusRemarks" rows="3" placeholder="أضف ملاحظات حول التحديث..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="submitStatusBtn">تحديث الحالة</button>
+                <button class="btn btn-secondary" id="cancelStatusBtn">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="employee-complaints.js"></script>
 </body>
 </html>
