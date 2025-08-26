@@ -1,7 +1,7 @@
 // Employee Follow-up Page JavaScript
 
 // Configuration
-const API_BASE_URL = '../backend';
+const API_BASE_URL = 'http://127.0.0.1:3001/api';
 let currentUser = null;
 let complaints = [];
 let filteredComplaints = [];

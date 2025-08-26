@@ -68,9 +68,7 @@ const elements = {
   completedComplaints: document.getElementById('completedComplaints'),
   urgentComplaints: document.getElementById('urgentComplaints'),
 
-  // سجلات النشاط
-  activitySection: document.getElementById('activitySection'),
-  activityLogsList: document.getElementById('activityLogsList'),
+
 
   // اللغة
   langToggle: document.getElementById('langToggle'),
@@ -78,14 +76,51 @@ const elements = {
 };
 
 // =================== Utils ===================
-const showLoading = () => elements.loadingOverlay?.classList.add('show');
-const hideLoading = () => elements.loadingOverlay?.classList.remove('show');
+const showLoading = () => {
+  if (elements.loadingOverlay) {
+    elements.loadingOverlay.classList.add('show');
+    console.log('تم عرض شاشة التحميل');
+  } else {
+    console.warn('عنصر loadingOverlay غير موجود');
+  }
+};
+
+const hideLoading = () => {
+  if (elements.loadingOverlay) {
+    elements.loadingOverlay.classList.remove('show');
+    console.log('تم إخفاء شاشة التحميل');
+  } else {
+    console.warn('عنصر loadingOverlay غير موجود');
+  }
+};
 
 const showError = (message) => {
-  if (elements.errorMessage) elements.errorMessage.textContent = message || 'حدث خطأ ما';
-  elements.errorModal?.classList.add('show');
+  console.log('عرض رسالة خطأ:', message);
+  
+  if (elements.errorMessage) {
+    elements.errorMessage.textContent = message || 'حدث خطأ ما';
+    console.log('تم تحديث نص رسالة الخطأ');
+  } else {
+    console.warn('عنصر errorMessage غير موجود');
+  }
+  
+  if (elements.errorModal) {
+    elements.errorModal.classList.add('show');
+    console.log('تم عرض نافذة الخطأ');
+  } else {
+    console.warn('عنصر errorModal غير موجود');
+    // عرض رسالة خطأ بسيطة كبديل
+    alert(`خطأ: ${message}`);
+  }
 };
-const hideError = () => elements.errorModal?.classList.remove('show');
+const hideError = () => {
+  if (elements.errorModal) {
+    elements.errorModal.classList.remove('show');
+    console.log('تم إخفاء نافذة الخطأ');
+  } else {
+    console.warn('عنصر errorModal غير موجود');
+  }
+};
 
 const formatDate = (dateString) => {
   const date = new Date(dateString);
@@ -98,163 +133,549 @@ const formatDate = (dateString) => {
 // =================== API Helper ===================
 const authHeaders = () => {
   const token = localStorage.getItem('token');
-  return {
+  const headers = {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {})
   };
+  
+  console.log('Headers المرسلة:', headers);
+  return headers;
 };
 
 const makeRequest = async (url, options = {}) => {
-  const res = await fetch(`${API_BASE_URL}${url}`, {
-    headers: { ...authHeaders(), ...(options.headers || {}) },
-    ...options
-  });
-  if (!res.ok) {
-    if (res.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '../login/login.html';
-      return;
+  try {
+    console.log(`=== إرسال طلب API ===`);
+    console.log(`URL: ${API_BASE_URL}${url}`);
+    console.log(`Headers:`, authHeaders());
+    
+    const res = await fetch(`${API_BASE_URL}${url}`, {
+      headers: { ...authHeaders(), ...(options.headers || {}) },
+      ...options
+    });
+    
+    console.log(`=== استجابة API ===`);
+    console.log(`URL: ${url}`);
+    console.log(`Status: ${res.status} ${res.statusText}`);
+    
+    if (!res.ok) {
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '../login/login.html';
+        throw new Error('HTTP 401: انتهت الجلسة');
+      }
+      const text = await res.text().catch(()=> '');
+      throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ''}`);
     }
-    const text = await res.text().catch(()=> '');
-    throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ''}`);
+    
+    const data = await res.json();
+    console.log(`=== بيانات API ===`);
+    console.log(`URL: ${url}`);
+    console.log(`Data:`, data);
+    console.log(`=== نهاية طلب API ===`);
+    return data;
+  } catch (error) {
+    console.error(`خطأ في الطلب إلى ${url}:`, error);
+    
+    // إضافة معلومات إضافية عن الخطأ
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('فشل في الاتصال بالخادم. تأكد من تشغيل الباك إند.');
+    }
+    
+    throw error;
   }
-  return res.json();
 };
 
 // =================== Loaders ===================
 
 /** 1) بيانات المستخدم: /api/employee/profile */
 const loadUserProfile = async () => {
-  const response = await makeRequest('/employee/profile');
-  if (!response?.success) throw new Error('profile_failed');
-  currentUser = response.data;
+  try {
+    console.log('جاري إرسال طلب لتحميل بيانات المستخدم...');
+    const response = await makeRequest('/employee/profile');
+    console.log('استجابة API:', response);
+    
+    if (!response?.success) {
+      console.error('استجابة API فاشلة:', response);
+      throw new Error(`profile_failed: ${response?.message || 'استجابة غير صحيحة'}`);
+    }
+    
+    if (!response.data || !response.data.EmployeeID) {
+      console.error('بيانات المستخدم غير مكتملة:', response.data);
+      throw new Error('بيانات المستخدم غير مكتملة');
+    }
+    
+    // التحقق من أن EmployeeID رقم صحيح
+    if (isNaN(Number(response.data.EmployeeID))) {
+      console.error('EmployeeID غير صحيح:', response.data.EmployeeID);
+      throw new Error('EmployeeID غير صحيح');
+    }
+    
+    // التحقق من أن البيانات الأساسية موجودة
+    if (!response.data.FullName) {
+      console.warn('FullName غير موجود في بيانات المستخدم');
+    }
+    
+    if (!response.data.DepartmentID) {
+      console.warn('DepartmentID غير موجود في بيانات المستخدم');
+    }
+    
+    currentUser = response.data;
+    console.log('تم تحميل بيانات المستخدم:', currentUser);
 
-  const nameEl = document.getElementById('userName');
-  if (nameEl) nameEl.textContent = currentUser.FullName || 'المستخدم';
+    try {
+      const nameEl = document.getElementById('userName');
+      if (nameEl) {
+        nameEl.textContent = currentUser.FullName || 'المستخدم';
+        console.log('تم تحديث اسم المستخدم في الواجهة');
+      } else {
+        console.warn('عنصر userName غير موجود');
+      }
 
-  localStorage.setItem('employeeDepartmentID', currentUser.DepartmentID || '');
-  localStorage.setItem('employeeNationalID', currentUser.NationalID || '');
+      // حفظ البيانات في localStorage مع قيم افتراضية
+      const departmentID = currentUser.DepartmentID || '';
+      const nationalID = currentUser.NationalID || '';
+      
+      localStorage.setItem('employeeDepartmentID', departmentID);
+      localStorage.setItem('employeeNationalID', nationalID);
+      
+      console.log('تم حفظ البيانات في localStorage:', { departmentID, nationalID });
+    } catch (error) {
+      console.error('خطأ في تحديث الواجهة أو حفظ البيانات:', error);
+    }
 
-  return currentUser;
+    console.log('تم تحميل بيانات المستخدم بنجاح:', currentUser);
+    return currentUser;
+  } catch (error) {
+    console.error('خطأ في تحميل بيانات المستخدم:', error);
+    currentUser = null; // إعادة تعيين currentUser إلى null في حالة الخطأ
+    throw error;
+  }
 };
 
 /** 2) إحصائيات الشكاوى: /api/employee/complaints */
 const loadStatistics = async () => {
-  const resp = await makeRequest('/employee/complaints?limit=100');
-  const complaints = resp?.data?.complaints || [];
-
-  const totalCount = complaints.length;
-  const pendingCount = complaints.filter(c =>
-    ['قيد المعالجة','معلقة','In Progress','Pending'].includes(c.Status)
-  ).length;
-  const completedCount = complaints.filter(c =>
-    ['مكتملة','مغلقة','Done','Closed','Resolved','تم الحل'].includes(c.Status)
-  ).length;
-  const urgentCount = complaints.filter(c =>
-    ['عاجل','عالية','High','Urgent'].includes(c.Priority)
-  ).length;
-
-  const myComplaintsCount = complaints.filter(c => c.CreatedBy === currentUser.EmployeeID).length;
-  const assignedComplaintsCount = complaints.filter(c => c.AssignedTo === currentUser.EmployeeID).length;
-
-  const today = new Date().toISOString().split('T')[0];
-  const newComplaintsCount = complaints.filter(c => String(c.CreatedAt || '').startsWith(today)).length;
-
-  if (elements.totalComplaints) elements.totalComplaints.textContent = totalCount;
-  if (elements.pendingComplaints) elements.pendingComplaints.textContent = pendingCount;
-  if (elements.completedComplaints) elements.completedComplaints.textContent = completedCount;
-  if (elements.urgentComplaints) elements.urgentComplaints.textContent = urgentCount;
-
-  if (elements.newComplaintsCount) elements.newComplaintsCount.textContent = newComplaintsCount;
-  if (elements.myComplaintsCount) elements.myComplaintsCount.textContent = myComplaintsCount;
-  if (elements.assignedComplaintsCount) elements.assignedComplaintsCount.textContent = assignedComplaintsCount;
-};
-
-/** 3) سجلات النشاط: /api/employee/activity-logs */
-const loadActivityLogs = async () => {
-  if (!elements.activityLogsList) return;
   try {
-    const resp = await makeRequest('/employee/activity-logs?limit=10');
-    const logs = (resp?.data?.logs) || [];
-
-    const list = elements.activityLogsList;
-    list.innerHTML = '';
-
-    if (!logs.length) {
-      list.innerHTML = `
-        <div class="activity-item">
-          <div class="activity-cell" style="grid-column:1 / -1; text-align:center; color:#666;">
-            لا توجد سجلات نشاط
-          </div>
-        </div>`;
+    console.log('=== بدء تحميل الإحصائيات ===');
+    console.log('currentUser:', currentUser);
+    console.log('EmployeeID:', currentUser?.EmployeeID);
+    console.log('FullName:', currentUser?.FullName);
+    
+    // التحقق من وجود currentUser
+    if (!currentUser || !currentUser.EmployeeID) {
+      console.warn('currentUser غير محدد، يتم تخطي تحميل الإحصائيات');
+      // تعيين قيم افتراضية
+      console.log('تعيين قيم افتراضية للإحصائيات بسبب عدم وجود currentUser');
+      
+      if (elements.totalComplaints) {
+        elements.totalComplaints.textContent = '0';
+        console.log('تم تعيين إجمالي الشكاوى إلى 0');
+      }
+      
+      if (elements.pendingComplaints) {
+        elements.pendingComplaints.textContent = '0';
+        console.log('تم تعيين الشكاوى المعلقة إلى 0');
+      }
+      
+      if (elements.completedComplaints) {
+        elements.completedComplaints.textContent = '0';
+        console.log('تم تعيين الشكاوى المكتملة إلى 0');
+      }
+      
+      if (elements.urgentComplaints) {
+        elements.urgentComplaints.textContent = '0';
+        console.log('تم تعيين الشكاوى العاجلة إلى 0');
+      }
+      
+      if (elements.newComplaintsCount) {
+        elements.newComplaintsCount.textContent = '0';
+        console.log('تم تعيين الشكاوى الجديدة إلى 0');
+      }
+      
+      if (elements.myComplaintsCount) {
+        elements.myComplaintsCount.textContent = '0';
+        console.log('تم تعيين شكاوى المستخدم إلى 0');
+      }
+      
+      if (elements.assignedComplaintsCount) {
+        elements.assignedComplaintsCount.textContent = '0';
+        console.log('تم تعيين الشكاوى المسندة إلى 0');
+      }
+      
+      return;
+    }
+    
+    // التحقق من أن EmployeeID رقم صحيح
+    if (isNaN(Number(currentUser.EmployeeID))) {
+      console.error('EmployeeID غير صحيح في currentUser:', currentUser.EmployeeID);
+      console.log('تعيين قيم افتراضية للإحصائيات بسبب EmployeeID غير صحيح');
+      
+      if (elements.totalComplaints) {
+        elements.totalComplaints.textContent = '0';
+        console.log('تم تعيين إجمالي الشكاوى إلى 0');
+      }
+      
+      if (elements.pendingComplaints) {
+        elements.pendingComplaints.textContent = '0';
+        console.log('تم تعيين الشكاوى المعلقة إلى 0');
+      }
+      
+      if (elements.completedComplaints) {
+        elements.completedComplaints.textContent = '0';
+        console.log('تم تعيين الشكاوى المكتملة إلى 0');
+      }
+      
+      if (elements.urgentComplaints) {
+        elements.urgentComplaints.textContent = '0';
+        console.log('تم تعيين الشكاوى العاجلة إلى 0');
+      }
+      
+      if (elements.newComplaintsCount) {
+        elements.newComplaintsCount.textContent = '0';
+        console.log('تم تعيين الشكاوى الجديدة إلى 0');
+      }
+      
+      if (elements.myComplaintsCount) {
+        elements.myComplaintsCount.textContent = '0';
+        console.log('تم تعيين شكاوى المستخدم إلى 0');
+      }
+      
+      if (elements.assignedComplaintsCount) {
+        elements.assignedComplaintsCount.textContent = '0';
+        console.log('تم تعيين الشكاوى المسندة إلى 0');
+      }
+      
       return;
     }
 
-    logs.forEach(log => {
-      const item = document.createElement('div');
-      item.className = 'activity-item';
-      item.innerHTML = `
-        <div class="activity-cell">${formatDate(log.CreatedAt || new Date())}</div>
-        <div class="activity-cell">${log.Username || '-'}</div>
-        <div class="activity-cell">${log.ActivityType || log.ActionType || '-'}</div>
-        <div class="activity-cell">${log.Description || log.ActionDescription || '-'}</div>
-      `;
-      list.appendChild(item);
-    });
-  } catch (e) {
-    if (String(e.message).includes('HTTP 403') && elements.activitySection) {
-      elements.activitySection.style.display = 'none';
+    console.log('جاري إرسال طلب لتحميل الشكاوى...');
+    const resp = await makeRequest('/employee/complaints?limit=100');
+    console.log('استجابة API للشكاوى:', resp);
+    
+    if (!resp?.data?.complaints) {
+      console.warn('لا توجد بيانات شكاوى في الاستجابة:', resp);
+      // تعيين قيم افتراضية
+      console.log('تعيين قيم افتراضية للإحصائيات بسبب عدم وجود بيانات');
+      
+      if (elements.totalComplaints) {
+        elements.totalComplaints.textContent = '0';
+        console.log('تم تعيين إجمالي الشكاوى إلى 0');
+      }
+      
+      if (elements.pendingComplaints) {
+        elements.pendingComplaints.textContent = '0';
+        console.log('تم تعيين الشكاوى المعلقة إلى 0');
+      }
+      
+      if (elements.completedComplaints) {
+        elements.completedComplaints.textContent = '0';
+        console.log('تم تعيين الشكاوى المكتملة إلى 0');
+      }
+      
+      if (elements.urgentComplaints) {
+        elements.urgentComplaints.textContent = '0';
+        console.log('تم تعيين الشكاوى العاجلة إلى 0');
+      }
+      
+      if (elements.newComplaintsCount) {
+        elements.newComplaintsCount.textContent = '0';
+        console.log('تم تعيين الشكاوى الجديدة إلى 0');
+      }
+      
+      if (elements.myComplaintsCount) {
+        elements.myComplaintsCount.textContent = '0';
+        console.log('تم تعيين شكاوى المستخدم إلى 0');
+      }
+      
+      if (elements.assignedComplaintsCount) {
+        elements.assignedComplaintsCount.textContent = '0';
+        console.log('تم تعيين الشكاوى المسندة إلى 0');
+      }
+      
       return;
     }
-    throw e;
+    
+    const complaints = resp.data.complaints;
+    console.log('عدد الشكاوى المحملة:', complaints.length);
+
+    // تصفية الشكاوى حسب نوعها
+    const myComplaints = complaints.filter(c => c.EmployeeID === currentUser.EmployeeID);
+    const assignedComplaints = complaints.filter(c => c.AssignedTo === currentUser.EmployeeID);
+    
+    console.log('الشكاوى التي أنشأتها:', myComplaints.length);
+    console.log('الشكاوى المسندة لي:', assignedComplaints.length);
+
+    // إحصائيات عامة (جميع الشكاوى المتعلقة بالموظف)
+    const totalCount = complaints.length;
+    console.log('إجمالي عدد الشكاوى المتعلقة بالموظف:', totalCount);
+    
+    // إحصائيات الحالة
+    const pendingCount = complaints.filter(c =>
+      ['قيد المعالجة','معلقة','In Progress','Pending'].includes(c.Status)
+    ).length;
+    console.log('عدد الشكاوى المعلقة:', pendingCount);
+    
+    const completedCount = complaints.filter(c =>
+      ['مكتملة','مغلقة','Done','Closed','Resolved','تم الحل'].includes(c.Status)
+    ).length;
+    console.log('عدد الشكاوى المكتملة:', completedCount);
+    
+    // إحصائيات الأولوية
+    const urgentCount = complaints.filter(c =>
+      ['عاجل','عالية','High','Urgent'].includes(c.Priority)
+    ).length;
+    console.log('عدد الشكاوى العاجلة:', urgentCount);
+
+    // إحصائيات خاصة
+    const myComplaintsCount = myComplaints.length;
+    console.log('عدد شكاوى المستخدم:', myComplaintsCount);
+    
+    const assignedComplaintsCount = assignedComplaints.length;
+    console.log('عدد الشكاوى المسندة للمستخدم:', assignedComplaintsCount);
+
+    const today = new Date().toISOString().split('T')[0];
+    const newComplaintsCount = complaints.filter(c => String(c.CreatedAt || '').startsWith(today)).length;
+    console.log('عدد الشكاوى الجديدة اليوم:', newComplaintsCount);
+
+    // تحديث العناصر في الواجهة
+    try {
+      // إحصائيات عامة
+      if (elements.totalComplaints) {
+        elements.totalComplaints.textContent = totalCount;
+        console.log(`تم تحديث إجمالي الشكاوى: ${totalCount}`);
+      }
+      
+      if (elements.pendingComplaints) {
+        elements.pendingComplaints.textContent = pendingCount;
+        console.log(`تم تحديث الشكاوى المعلقة: ${pendingCount}`);
+      }
+      
+      if (elements.completedComplaints) {
+        elements.completedComplaints.textContent = completedCount;
+        console.log(`تم تحديث الشكاوى المكتملة: ${completedCount}`);
+      }
+      
+      if (elements.urgentComplaints) {
+        elements.urgentComplaints.textContent = urgentCount;
+        console.log(`تم تحديث الشكاوى العاجلة: ${urgentCount}`);
+      }
+
+      // إحصائيات البطاقات
+      if (elements.newComplaintsCount) {
+        elements.newComplaintsCount.textContent = newComplaintsCount;
+        console.log(`تم تحديث الشكاوى الجديدة اليوم: ${newComplaintsCount}`);
+      }
+      
+      if (elements.myComplaintsCount) {
+        elements.myComplaintsCount.textContent = myComplaintsCount;
+        console.log(`تم تحديث شكاوى المستخدم: ${myComplaintsCount}`);
+      }
+      
+      if (elements.assignedComplaintsCount) {
+        elements.assignedComplaintsCount.textContent = assignedComplaintsCount;
+        console.log(`تم تحديث الشكاوى المسندة: ${assignedComplaintsCount}`);
+      }
+    } catch (error) {
+      console.error('خطأ في تحديث عناصر الواجهة:', error);
+    }
+    
+    console.log('=== ملخص الإحصائيات ===');
+    console.log(`إجمالي الشكاوى: ${totalCount}`);
+    console.log(`الشكاوى المعلقة: ${pendingCount}`);
+    console.log(`الشكاوى المكتملة: ${completedCount}`);
+    console.log(`الشكاوى العاجلة: ${urgentCount}`);
+    console.log(`الشكاوى الجديدة اليوم: ${newComplaintsCount}`);
+    console.log(`شكاوى المستخدم: ${myComplaintsCount}`);
+    console.log(`الشكاوى المسندة: ${assignedComplaintsCount}`);
+    console.log('=== تم تحديث الإحصائيات بنجاح ===');
+  } catch (error) {
+    console.error('خطأ في تحميل الإحصائيات:', error);
+    
+    // تعيين قيم افتراضية في حالة الخطأ
+    console.log('تعيين قيم افتراضية للإحصائيات بسبب الخطأ');
+    
+    if (elements.totalComplaints) {
+      elements.totalComplaints.textContent = '0';
+      console.log('تم تعيين إجمالي الشكاوى إلى 0');
+    }
+    
+    if (elements.pendingComplaints) {
+      elements.pendingComplaints.textContent = '0';
+      console.log('تم تعيين الشكاوى المعلقة إلى 0');
+    }
+    
+    if (elements.completedComplaints) {
+      elements.completedComplaints.textContent = '0';
+      console.log('تم تعيين الشكاوى المكتملة إلى 0');
+    }
+    
+    if (elements.urgentComplaints) {
+      elements.urgentComplaints.textContent = '0';
+      console.log('تم تعيين الشكاوى العاجلة إلى 0');
+    }
+    
+    if (elements.newComplaintsCount) {
+      elements.newComplaintsCount.textContent = '0';
+      console.log('تم تعيين الشكاوى الجديدة إلى 0');
+    }
+    
+    if (elements.myComplaintsCount) {
+      elements.myComplaintsCount.textContent = '0';
+      console.log('تم تعيين شكاوى المستخدم إلى 0');
+    }
+    
+    if (elements.assignedComplaintsCount) {
+      elements.assignedComplaintsCount.textContent = '0';
+      console.log('تم تعيين الشكاوى المسندة إلى 0');
+    }
   }
 };
 
+
+
 // =================== Language ===================
 const initLanguageSwitcher = () => {
-  elements.langToggle?.addEventListener('click', () => {
-    const currentLang = localStorage.getItem('lang') || 'ar';
-    const newLang = currentLang === 'ar' ? 'en' : 'ar';
-    localStorage.setItem('lang', newLang);
-    if (elements.langText) {
-      elements.langText.textContent = newLang === 'ar' ? 'English | العربية' : 'العربية | English';
-    }
-    document.documentElement.lang = newLang;
-    document.body.dir = newLang === 'ar' ? 'rtl' : 'ltr';
-    document.body.className = `lang-${newLang}`;
-  });
+  if (elements.langToggle) {
+    elements.langToggle.addEventListener('click', () => {
+      const currentLang = localStorage.getItem('lang') || 'ar';
+      const newLang = currentLang === 'ar' ? 'en' : 'ar';
+      localStorage.setItem('lang', newLang);
+      
+      if (elements.langText) {
+        elements.langText.textContent = newLang === 'ar' ? 'English | العربية' : 'العربية | English';
+      }
+      
+      document.documentElement.lang = newLang;
+      document.body.dir = newLang === 'ar' ? 'rtl' : 'ltr';
+      document.body.className = `lang-${newLang}`;
+      
+      console.log('تم تغيير اللغة إلى:', newLang);
+    });
+    console.log('تم إضافة مستمع حدث لزر تغيير اللغة');
+  } else {
+    console.warn('عنصر langToggle غير موجود');
+  }
 };
 
 // =================== Init ===================
 const initPage = async () => {
+  console.log('بدء تهيئة الصفحة...');
+  
   const token = localStorage.getItem('token');
+  console.log('Token موجود:', !!token);
+  
   if (!token) {
+    console.log('لا يوجد token، إعادة توجيه لصفحة تسجيل الدخول');
     window.location.href = '../login/login.html';
     return;
   }
 
-  elements.closeErrorModal?.addEventListener('click', hideError);
-  elements.closeErrorBtn?.addEventListener('click', hideError);
+      // إضافة مستمعي الأحداث لأزرار إغلاق نافذة الخطأ
+    try {
+      if (elements.closeErrorModal) {
+        elements.closeErrorModal.addEventListener('click', hideError);
+        console.log('تم إضافة مستمع حدث لإغلاق نافذة الخطأ');
+      } else {
+        console.warn('عنصر closeErrorModal غير موجود');
+      }
+      
+      if (elements.closeErrorBtn) {
+        elements.closeErrorBtn.addEventListener('click', hideError);
+        console.log('تم إضافة مستمع حدث لزر إغلاق الخطأ');
+      } else {
+        console.warn('عنصر closeErrorBtn غير موجود');
+      }
+    } catch (error) {
+      console.error('خطأ في إضافة مستمعي الأحداث:', error);
+    }
 
-  showLoading();
-  try {
-    await loadUserProfile();
-    await Promise.all([loadStatistics(), loadActivityLogs()]);
-    initLanguageSwitcher();
+      try {
+      showLoading();
+    } catch (error) {
+      console.error('خطأ في عرض شاشة التحميل:', error);
+    }
+    
+    try {
+    console.log('بدء تهيئة الصفحة...');
+    
+    try {
+      // تحميل بيانات المستخدم أولاً
+      console.log('جاري تحميل بيانات المستخدم...');
+      await loadUserProfile();
+      console.log('تم تحميل بيانات المستخدم بنجاح');
+      
+      // ثم تحميل الإحصائيات وسجلات النشاط بشكل متسلسل
+      console.log('جاري تحميل الإحصائيات...');
+      await loadStatistics();
+      console.log('تم تحميل الإحصائيات بنجاح');
+      
+
+      
+      try {
+        initLanguageSwitcher();
+        console.log('تم تهيئة مبدل اللغة بنجاح');
+      } catch (error) {
+        console.error('خطأ في تهيئة مبدل اللغة:', error);
+        // لا نوقف العملية بسبب خطأ في مبدل اللغة
+      }
+      
+      console.log('تم تهيئة الصفحة بنجاح');
+    } catch (error) {
+      console.error('خطأ في تحميل البيانات:', error);
+      throw error; // إعادة رمي الخطأ للمعالجة في catch الخارجي
+    }
   } catch (err) {
     console.error('Error initializing page:', err);
+    let errorMessage = 'حدث خطأ في تحميل الصفحة.';
+    
     if (String(err.message).includes('HTTP 404')) {
-      showError('المسار المطلوب غير موجود (404).');
+      errorMessage = 'المسار المطلوب غير موجود (404).';
     } else if (String(err.message).includes('HTTP 401')) {
-      showError('انتهت الجلسة. يرجى تسجيل الدخول من جديد.');
+      errorMessage = 'انتهت الجلسة. يرجى تسجيل الدخول من جديد.';
+      // إعادة توجيه لصفحة تسجيل الدخول بعد 3 ثوان
+      try {
+        setTimeout(() => {
+          try {
+            window.location.href = '../login/login.html';
+          } catch (error) {
+            console.error('خطأ في إعادة التوجيه:', error);
+            // محاولة إعادة التوجيه بطريقة أخرى
+            location.href = '../login/login.html';
+          }
+        }, 3000);
+      } catch (error) {
+        console.error('خطأ في تعيين مؤقت إعادة التوجيه:', error);
+        // إعادة توجيه فورية
+        try {
+          window.location.href = '../login/login.html';
+        } catch (redirectError) {
+          console.error('خطأ في إعادة التوجيه الفورية:', redirectError);
+        }
+      }
     } else if (String(err.message).includes('HTTP 403')) {
-      showError('لا تملك صلاحية الوصول (403).');
-    } else {
-      showError('حدث خطأ في تحميل الصفحة.');
+      errorMessage = 'لا تملك صلاحية الوصول (403).';
+    } else if (String(err.message).includes('Failed to fetch') || String(err.message).includes('فشل في الاتصال بالخادم')) {
+      errorMessage = 'لا يمكن الاتصال بالخادم. تأكد من تشغيل الباك إند.';
+    } else if (String(err.message).includes('profile_failed')) {
+      errorMessage = 'فشل في تحميل بيانات المستخدم. تأكد من صحة الجلسة.';
+    } else if (String(err.message).includes('بيانات المستخدم غير مكتملة') || String(err.message).includes('EmployeeID غير صحيح')) {
+      errorMessage = 'بيانات المستخدم غير صحيحة. يرجى تسجيل الدخول من جديد.';
     }
-  } finally {
-    hideLoading();
-  }
+    
+    console.error('رسالة الخطأ للمستخدم:', errorMessage);
+    try {
+      showError(errorMessage);
+    } catch (error) {
+      console.error('خطأ في عرض رسالة الخطأ:', error);
+      // عرض رسالة خطأ بسيطة كبديل
+      alert(`خطأ: ${errorMessage}`);
+    }
+      } finally {
+      try {
+        hideLoading();
+      } catch (error) {
+        console.error('خطأ في إخفاء شاشة التحميل:', error);
+      }
+    }
 };
 
 document.addEventListener('DOMContentLoaded', initPage);

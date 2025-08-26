@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { authenticateToken } = require('../middleware/auth');
 const { 
     checkEmployeePermissions, 
     checkComplaintOwnership, 
@@ -16,7 +17,8 @@ const {
     markNotificationAsRead
 } = require('../controllers/employeeController');
 
-// تطبيق middleware للصلاحيات على جميع المسارات
+// تطبيق middleware المصادقة أولاً، ثم الصلاحيات
+router.use(authenticateToken);
 router.use(checkEmployeePermissions);
 
 // الملف الشخصي للموظف
@@ -52,6 +54,36 @@ router.put('/complaints/:complaintId/status',
     checkComplaintOwnership,
     logEmployeeActivity('update_status', 'تحديث حالة الشكوى', 'params.complaintId', 'complaint'),
     updateComplaintStatus
+);
+
+// سجلات النشاط
+router.get('/activity-logs', 
+    logEmployeeActivity('view_activity_logs', 'عرض سجلات النشاط'),
+    async (req, res) => {
+        try {
+            const employeeId = req.user.EmployeeID;
+            const limit = parseInt(req.query.limit) || 10;
+            
+            const [logs] = await require('../config/database').execute(
+                `SELECT * FROM activitylogs 
+                 WHERE EmployeeID = ? 
+                 ORDER BY CreatedAt DESC 
+                 LIMIT ?`,
+                [employeeId, limit]
+            );
+            
+            res.json({
+                success: true,
+                data: { logs }
+            });
+        } catch (error) {
+            console.error('خطأ في جلب سجلات النشاط:', error);
+            res.status(500).json({
+                success: false,
+                message: 'حدث خطأ في الخادم'
+            });
+        }
+    }
 );
 
 // الإشعارات

@@ -327,65 +327,7 @@ color:#374151;
 margin: 0;
 }
 
-/* Activity Logs Section */
-.activity-logs-section {
-  margin-bottom: 3rem;
-}
 
-.activity-logs-section h2 {
-  color: #333;
-  font-size: 1.8rem;
-  font-weight: 600;
-  margin-bottom: 2rem;
-  text-align: center;
-}
-
-.activity-table {
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.table-header {
-  background: linear-gradient(135deg, #1565c0, #42a5f5);
-  color: white;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 2fr;
-  padding: 1rem;
-}
-
-.header-cell {
-  font-weight: 600;
-  text-align: center;
-}
-
-.table-body {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.activity-item {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 2fr;
-  padding: 1rem;
-  border-bottom: 1px solid #eee;
-  transition: background-color 0.3s ease;
-}
-
-.activity-item:hover {
-  background-color: #f8f9fa;
-}
-
-.activity-item:last-child {
-  border-bottom: none;
-}
-
-.activity-cell {
-  text-align: center;
-  color: #666;
-  font-size: 0.9rem;
-}
 
 /* Notifications Panel */
 .notifications-panel {

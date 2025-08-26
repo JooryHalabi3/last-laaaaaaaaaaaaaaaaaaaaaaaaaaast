@@ -22,6 +22,7 @@ function showSuccess(message) { alert(message); }
 // تحقق من صحّة المدخلات
 function validateEmail(email){ const re=/^[^\s@]+@[^\s@]+\.[^\s@]+$/; return re.test(email); }
 function validatePhone(phone){ const re=/^[0-9]{10,15}$/; return re.test(phone); }
+function validateNationalID(nationalID){ const re=/^[0-9]{10}$/; return re.test(nationalID); }
 
 // ============================
 // تحميل الأقسام لقائمة التسجيل
@@ -127,11 +128,13 @@ async function register() {
   const username = document.getElementById("regID").value.trim();
   const phoneNumber = document.getElementById("regPhone").value.trim();
   const departmentID = document.getElementById("regDepartment").value;
+  const nationalID = document.getElementById("regNationalID").value.trim();
 
-  if (!fullName || !username || !email || !password || !confirmPassword || !phoneNumber || !departmentID)
+  if (!fullName || !username || !email || !password || !confirmPassword || !phoneNumber || !departmentID || !nationalID)
     return showError("يرجى تعبئة جميع الحقول.");
   if (!validateEmail(email)) return showError("يرجى إدخال بريد إلكتروني صحيح.");
   if (!validatePhone(phoneNumber)) return showError("يرجى إدخال رقم هاتف صحيح.");
+  if (!validateNationalID(nationalID)) return showError("يرجى إدخال هوية وطنية صحيحة (10 أرقام).");
   if (password.length < 6) return showError("كلمة المرور يجب أن تكون 6 أحرف على الأقل.");
   if (password !== confirmPassword) return showError("كلمتا المرور غير متطابقتين.");
 
@@ -141,7 +144,7 @@ async function register() {
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({
         fullName, username, password, email, phoneNumber,
-        specialty: '', departmentID: Number(departmentID)
+        specialty: '', departmentID: Number(departmentID), nationalID
       })
     });
     const data = await res.json();
