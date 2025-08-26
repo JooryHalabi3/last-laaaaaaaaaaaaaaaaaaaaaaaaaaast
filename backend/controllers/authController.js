@@ -103,13 +103,32 @@ const setupEmployeesTable = async () => {
 // التسجيل العام = موظف فقط + قسم موجود
 const register = async (req, res) => {
   try {
+    console.log('=== بدء عملية التسجيل ===');
+    console.log('Request Body:', req.body);
+    
     const {
       fullName, username, password, email, phoneNumber,
       specialty, departmentID, nationalID
     } = req.body;
+    
+    console.log('Parsed Data:', {
+      fullName, username, password: password ? '***' : 'MISSING', 
+      email, phoneNumber, specialty, departmentID, nationalID
+    });
 
+    // التحقق من الحقول المطلوبة
     if (!fullName || !username || !password || !departmentID || !nationalID) {
-      return res.status(400).json({ success: false, message: 'الاسم، اسم المستخدم، كلمة المرور، القسم، والهوية الوطنية مطلوبة' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'الاسم، اسم المستخدم، كلمة المرور، القسم، والهوية الوطنية مطلوبة',
+        missing: {
+          fullName: !fullName,
+          username: !username,
+          password: !password,
+          departmentID: !departmentID,
+          nationalID: !nationalID
+        }
+      });
     }
 
     const [dept] = await pool.execute('SELECT 1 FROM Departments WHERE DepartmentID = ?', [departmentID]);
@@ -130,13 +149,28 @@ const register = async (req, res) => {
 
     const enforcedRoleID = 2; // EMPLOYEE
     const passwordHash = await bcrypt.hash(password, 10);
+    
+    console.log('=== بيانات الإدراج ===');
+    console.log('SQL Query:', `
+      INSERT INTO Employees (
+        FullName, Username, PasswordHash, Email, PhoneNumber, NationalID, RoleID, Specialty, DepartmentID
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    console.log('Values:', [
+      fullName, username, '***HASHED***', email || null, phoneNumber || null, 
+      nationalID, enforcedRoleID, specialty || null, departmentID
+    ]);
 
     const [ins] = await pool.execute(`
       INSERT INTO Employees (
         FullName, Username, PasswordHash, Email, PhoneNumber, NationalID, RoleID, Specialty, DepartmentID
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [fullName, username, passwordHash, email || null, phoneNumber || null, nationalID || null, enforcedRoleID, specialty || null, departmentID]
+      [fullName, username, passwordHash, email || null, phoneNumber || null, nationalID, enforcedRoleID, specialty || null, departmentID]
     );
+    
+    console.log('=== تم الإدراج بنجاح ===');
+    console.log('Insert Result:', ins);
+    console.log('New Employee ID:', ins.insertId);
 
     const [rows] = await pool.execute(`
       SELECT e.EmployeeID, e.FullName, e.Username, e.Email, e.PhoneNumber, e.NationalID, e.Specialty, e.JoinDate,
