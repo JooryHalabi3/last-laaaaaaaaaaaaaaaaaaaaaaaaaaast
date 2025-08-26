@@ -11,7 +11,7 @@ async function loadComplaintDetails() {
   // إذا لم توجد بيانات، محاولة الحصول عليها من URL
   if (!selectedComplaint) {
     const urlParams = new URLSearchParams(window.location.search);
-    const complaintId = urlParams.get('complaint');
+    const complaintId = urlParams.get('id') || urlParams.get('complaint');
     
     if (complaintId) {
       console.log('لا توجد بيانات في localStorage، محاولة جلبها من API باستخدام ID:', complaintId);

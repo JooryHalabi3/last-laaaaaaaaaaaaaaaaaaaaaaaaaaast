@@ -147,7 +147,7 @@ const makeRequest = async (url, options = {}) => {
 // Load user profile
 const loadUserProfile = async () => {
     try {
-        const response = await makeRequest('/api/employee/profile');
+        const response = await makeRequest('/employee/profile');
         if (response.success) {
             currentUser = response.data;
             elements.userName.textContent = currentUser.FullName;
@@ -159,18 +159,56 @@ const loadUserProfile = async () => {
     }
 };
 
-// Load complaints
+// Load complaints - Updated to include assigned complaints
 const loadComplaints = async () => {
     try {
         showLoading();
         
-        const response = await makeRequest('/api/employee/complaints?limit=1000');
-        if (response.success) {
-            complaints = response.data.complaints;
-            updateStatistics();
-            applyFilters();
-            renderComplaints();
+        // Load both personal complaints and assigned complaints
+        const [personalResponse, assignedResponse] = await Promise.all([
+            makeRequest('/employee/complaints?limit=1000'),
+            makeRequest('/employee/assigned-complaints?limit=1000')
+        ]);
+        
+        let allComplaints = [];
+        
+        if (personalResponse.success) {
+            allComplaints = allComplaints.concat(personalResponse.data.complaints || []);
         }
+        
+        if (assignedResponse.success) {
+            const assignedComplaints = assignedResponse.data.complaints || [];
+            // Mark assigned complaints with a flag
+            assignedComplaints.forEach(complaint => {
+                complaint.isAssigned = true;
+                complaint.AssignedTo = currentUser.EmployeeID;
+            });
+            allComplaints = allComplaints.concat(assignedComplaints);
+        }
+        
+        // If no assigned complaints endpoint, try to get them from general complaints
+        if (!assignedResponse.success || assignedResponse.data.complaints.length === 0) {
+            try {
+                const generalResponse = await makeRequest('/complaints/all?limit=1000');
+                if (generalResponse.success) {
+                    const generalComplaints = generalResponse.data.filter(complaint => 
+                        complaint.AssignedTo === currentUser.EmployeeID
+                    );
+                    generalComplaints.forEach(complaint => {
+                        complaint.isAssigned = true;
+                        complaint.AssignedTo = currentUser.EmployeeID;
+                    });
+                    allComplaints = allComplaints.concat(generalComplaints);
+                }
+            } catch (error) {
+                console.log('Could not load general complaints for assignment check:', error);
+            }
+        }
+        
+        complaints = allComplaints;
+        updateStatistics();
+        applyFilters();
+        renderComplaints();
     } catch (error) {
         console.error('Error loading complaints:', error);
         showError('حدث خطأ في تحميل الشكاوى');
@@ -185,7 +223,7 @@ const updateStatistics = () => {
     
     const total = complaints.length;
     const myComplaints = complaints.filter(c => c.EmployeeID === currentUser.EmployeeID).length;
-    const assignedToMe = complaints.filter(c => c.AssignedTo === currentUser.EmployeeID).length;
+    const assignedToMe = complaints.filter(c => c.isAssigned || c.AssignedTo === currentUser.EmployeeID).length;
     const pending = complaints.filter(c => 
         c.Status === 'قيد المعالجة' || c.Status === 'معلقة'
     ).length;
@@ -203,13 +241,13 @@ const applyFilters = () => {
     // Status filter
     const status = elements.statusFilter.value;
     if (status) {
-        filtered = filtered.filter(c => c.Status === status);
+        filtered = filtered.filter(c => c.Status === status || c.CurrentStatus === status);
     }
     
     // Category filter
     const category = elements.categoryFilter.value;
     if (category) {
-        filtered = filtered.filter(c => c.Category === category);
+        filtered = filtered.filter(c => c.Category === category || c.ComplaintTypeName === category);
     }
     
     // Type filter (my complaints vs assigned to me)
@@ -217,16 +255,23 @@ const applyFilters = () => {
     if (type === 'my') {
         filtered = filtered.filter(c => c.EmployeeID === currentUser.EmployeeID);
     } else if (type === 'assigned') {
-        filtered = filtered.filter(c => c.AssignedTo === currentUser.EmployeeID);
+        filtered = filtered.filter(c => c.isAssigned || c.AssignedTo === currentUser.EmployeeID);
     }
     
     // Search filter
     const search = elements.searchInput.value.toLowerCase().trim();
     if (search) {
-        filtered = filtered.filter(c => 
-            c.Title.toLowerCase().includes(search) ||
-            c.Description.toLowerCase().includes(search)
-        );
+        filtered = filtered.filter(c => {
+            const title = (c.Title || c.ComplaintDetails || '').toLowerCase();
+            const description = (c.Description || c.ComplaintDetails || '').toLowerCase();
+            const patientName = (c.PatientName || '').toLowerCase();
+            const complaintId = (c.ComplaintID || '').toString();
+            
+            return title.includes(search) || 
+                   description.includes(search) || 
+                   patientName.includes(search) ||
+                   complaintId.includes(search);
+        });
     }
     
     // Sort
@@ -234,18 +279,22 @@ const applyFilters = () => {
     filtered.sort((a, b) => {
         switch (sortBy) {
             case 'newest':
-                return new Date(b.CreatedAt) - new Date(a.CreatedAt);
+                return new Date(b.CreatedAt || b.ComplaintDate) - new Date(a.CreatedAt || a.ComplaintDate);
             case 'oldest':
-                return new Date(a.CreatedAt) - new Date(b.CreatedAt);
+                return new Date(a.CreatedAt || a.ComplaintDate) - new Date(b.CreatedAt || b.ComplaintDate);
             case 'title':
-                return a.Title.localeCompare(b.Title, 'ar');
+                const titleA = a.Title || a.ComplaintDetails || '';
+                const titleB = b.Title || b.ComplaintDetails || '';
+                return titleA.localeCompare(titleB, 'ar');
             case 'status':
-                return a.Status.localeCompare(b.Status, 'ar');
+                const statusA = a.Status || a.CurrentStatus || '';
+                const statusB = b.Status || b.CurrentStatus || '';
+                return statusA.localeCompare(statusB, 'ar');
             case 'priority':
                 const priorityOrder = { 'عاجل': 4, 'عالي': 3, 'متوسط': 2, 'منخفض': 1 };
                 return (priorityOrder[b.Priority] || 0) - (priorityOrder[a.Priority] || 0);
             default:
-                return new Date(b.CreatedAt) - new Date(a.CreatedAt);
+                return new Date(b.CreatedAt || b.ComplaintDate) - new Date(a.CreatedAt || a.ComplaintDate);
         }
     });
     
@@ -279,35 +328,44 @@ const renderComplaints = () => {
         complaintElement.className = 'complaint-item';
         
         const isMyComplaint = complaint.EmployeeID === currentUser.EmployeeID;
-        const isAssignedToMe = complaint.AssignedTo === currentUser.EmployeeID;
+        const isAssignedToMe = complaint.isAssigned || complaint.AssignedTo === currentUser.EmployeeID;
+        
+        // Get complaint title and description
+        const title = complaint.Title || complaint.ComplaintDetails || 'شكوى بدون عنوان';
+        const description = complaint.Description || complaint.ComplaintDetails || 'لا يوجد وصف';
+        const status = complaint.Status || complaint.CurrentStatus || 'جديدة';
+        const category = complaint.Category || complaint.ComplaintTypeName || 'غير محدد';
+        const createdAt = complaint.CreatedAt || complaint.ComplaintDate;
+        const updatedAt = complaint.UpdatedAt || complaint.ComplaintDate;
         
         complaintElement.innerHTML = `
             <div class="complaint-icon">
-                <i class="${getCategoryIcon(complaint.Category)}"></i>
+                <i class="${getCategoryIcon(category)}"></i>
             </div>
             <div class="complaint-content">
                 <div class="complaint-header">
                     <div>
-                        <div class="complaint-title">${complaint.Title}</div>
+                        <div class="complaint-title">${title}</div>
                         <div class="complaint-meta">
-                            <span><i class="fas fa-tag"></i> ${complaint.Category}</span>
-                            <span><i class="fas fa-calendar"></i> ${formatDate(complaint.CreatedAt)}</span>
+                            <span><i class="fas fa-tag"></i> ${category}</span>
+                            <span><i class="fas fa-calendar"></i> ${formatDate(createdAt)}</span>
                             ${complaint.Priority ? `<span><i class="fas fa-exclamation"></i> ${complaint.Priority}</span>` : ''}
                             ${isMyComplaint ? '<span><i class="fas fa-user"></i> شكواي</span>' : ''}
                             ${isAssignedToMe ? '<span><i class="fas fa-tasks"></i> مسندة لي</span>' : ''}
                         </div>
                     </div>
-                    <span class="complaint-status ${getStatusClass(complaint.Status)}">
-                        ${complaint.Status}
+                    <span class="complaint-status ${getStatusClass(status)}">
+                        ${status}
                     </span>
                 </div>
                 <div class="complaint-description">
-                    ${complaint.Description}
+                    ${description.length > 150 ? description.substring(0, 150) + '...' : description}
                 </div>
                 <div class="complaint-footer">
                     <div class="complaint-info">
                         <span><i class="fas fa-comments"></i> ${complaint.ResponseCount || 0} رد</span>
-                        <span><i class="fas fa-clock"></i> آخر تحديث: ${formatDate(complaint.UpdatedAt)}</span>
+                        <span><i class="fas fa-clock"></i> آخر تحديث: ${formatDate(updatedAt)}</span>
+                        ${complaint.PatientName ? `<span><i class="fas fa-user-injured"></i> ${complaint.PatientName}</span>` : ''}
                     </div>
                     <div class="complaint-actions">
                         <button class="action-btn primary" onclick="viewComplaint(${complaint.ComplaintID})">
@@ -435,63 +493,98 @@ window.showComplaintDetails = async (complaintId) => {
     try {
         showLoading();
         
-        const response = await makeRequest(`/api/employee/complaints/${complaintId}`);
-        if (response.success) {
-            const complaint = response.data.complaint;
-            const responses = response.data.responses;
-            
-            elements.complaintDetails.innerHTML = `
-                <div class="complaint-detail-header">
-                    <h4>${complaint.Title}</h4>
-                    <span class="complaint-status ${getStatusClass(complaint.Status)}">
-                        ${complaint.Status}
-                    </span>
-                </div>
-                
-                <div class="complaint-detail-meta">
-                    <div class="meta-item">
-                        <strong>الفئة:</strong> ${complaint.Category}
-                    </div>
-                    <div class="meta-item">
-                        <strong>الأولوية:</strong> ${complaint.Priority || 'غير محدد'}
-                    </div>
-                    <div class="meta-item">
-                        <strong>تاريخ الإنشاء:</strong> ${formatDate(complaint.CreatedAt)}
-                    </div>
-                    <div class="meta-item">
-                        <strong>آخر تحديث:</strong> ${formatDate(complaint.UpdatedAt)}
-                    </div>
-                </div>
-                
-                <div class="complaint-detail-description">
-                    <h5>الوصف:</h5>
-                    <p>${complaint.Description}</p>
-                </div>
-                
-                ${responses.length > 0 ? `
-                    <div class="complaint-responses">
-                        <h5>الردود (${responses.length}):</h5>
-                        ${responses.map(response => `
-                            <div class="response-item">
-                                <div class="response-header">
-                                    <strong>${response.EmployeeName}</strong>
-                                    <span class="response-date">${formatDate(response.CreatedAt)}</span>
-                                </div>
-                                <div class="response-content">${response.Content}</div>
-                            </div>
-                        `).join('')}
-                    </div>
-                ` : ''}
-            `;
-            
-            // Set up open complaint button
-            elements.openComplaintBtn.onclick = () => {
-                elements.detailsModal.classList.remove('show');
-                viewComplaint(complaintId);
-            };
-            
-            elements.detailsModal.classList.add('show');
+        // Try to get complaint details from multiple sources
+        let complaint = null;
+        let responses = [];
+        
+        // First try the employee-specific endpoint
+        try {
+            const response = await makeRequest(`/employee/complaints/${complaintId}`);
+            if (response.success) {
+                complaint = response.data.complaint;
+                responses = response.data.responses || [];
+            }
+        } catch (error) {
+            console.log('Employee endpoint failed, trying general endpoint:', error);
         }
+        
+        // If employee endpoint failed, try general endpoint
+        if (!complaint) {
+            try {
+                const response = await makeRequest(`/complaints/details/${complaintId}`);
+                if (response.success) {
+                    complaint = response.data.complaint;
+                    responses = response.data.responses || [];
+                }
+            } catch (error) {
+                console.log('General endpoint also failed:', error);
+            }
+        }
+        
+        // If still no complaint, try to find it in local data
+        if (!complaint) {
+            complaint = complaints.find(c => c.ComplaintID === complaintId);
+            if (complaint) {
+                console.log('Found complaint in local data');
+            }
+        }
+        
+        if (!complaint) {
+            throw new Error('Could not load complaint details');
+        }
+        
+        elements.complaintDetails.innerHTML = `
+            <div class="complaint-detail-header">
+                <h4>${complaint.Title || complaint.ComplaintDetails || 'شكوى بدون عنوان'}</h4>
+                <span class="complaint-status ${getStatusClass(complaint.Status || complaint.CurrentStatus)}">
+                    ${complaint.Status || complaint.CurrentStatus || 'غير محدد'}
+                </span>
+            </div>
+            
+            <div class="complaint-detail-meta">
+                <div class="meta-item">
+                    <strong>الفئة:</strong> ${complaint.Category || complaint.ComplaintTypeName || 'غير محدد'}
+                </div>
+                <div class="meta-item">
+                    <strong>الأولوية:</strong> ${complaint.Priority || 'غير محدد'}
+                </div>
+                <div class="meta-item">
+                    <strong>تاريخ الإنشاء:</strong> ${formatDate(complaint.CreatedAt || complaint.ComplaintDate)}
+                </div>
+                <div class="meta-item">
+                    <strong>آخر تحديث:</strong> ${formatDate(complaint.UpdatedAt || complaint.ComplaintDate)}
+                </div>
+                ${complaint.isAssigned ? '<div class="meta-item"><strong>الحالة:</strong> مسندة لك</div>' : ''}
+            </div>
+            
+            <div class="complaint-detail-description">
+                <h5>الوصف:</h5>
+                <p>${complaint.Description || complaint.ComplaintDetails || 'لا يوجد وصف'}</p>
+            </div>
+            
+            ${responses.length > 0 ? `
+                <div class="complaint-responses">
+                    <h5>الردود (${responses.length}):</h5>
+                    ${responses.map(response => `
+                        <div class="response-item">
+                            <div class="response-header">
+                                <strong>${response.EmployeeName || 'موظف'}</strong>
+                                <span class="response-date">${formatDate(response.CreatedAt)}</span>
+                            </div>
+                            <div class="response-content">${response.Content}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+        `;
+        
+        // Set up open complaint button
+        elements.openComplaintBtn.onclick = () => {
+            elements.detailsModal.classList.remove('show');
+            viewComplaint(complaintId);
+        };
+        
+        elements.detailsModal.classList.add('show');
     } catch (error) {
         console.error('Error loading complaint details:', error);
         showError('حدث خطأ في تحميل تفاصيل الشكوى');

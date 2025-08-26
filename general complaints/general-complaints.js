@@ -150,6 +150,9 @@ async function loadComplaints() {
     if (user.roleID === 2) {
       // المستخدم العادي: استخدام endpoint الشخصي
       endpoint = '/complaints/my-complaints';
+    } else if (user.roleID === 3) {
+      // إداري القسم: استخدام endpoint قسمه
+      endpoint = `/dept-admin/complaints/department/${user.DepartmentID}`;
     }
 
     const response = await fetch(`${API_BASE_URL}${endpoint}?${params}`, {

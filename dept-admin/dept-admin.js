@@ -577,10 +577,34 @@ async function viewComplaint(complaintId) {
   console.log('Opening complaint details for ID:', complaintId);
   
   try {
-    // Navigate to the general complaints details page with the complaint ID
-    window.location.href = `/general complaints/details.html?id=${complaintId}`;
+    // First, get the complaint details from the API
+    const response = await fetch(`${API_BASE_URL}/complaints/details/${complaintId}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.data.complaint) {
+        // Save complaint data to localStorage for the details page
+        const complaintToSave = {
+          ...data.data.complaint,
+          _dataSource: 'dept-admin',
+          _timestamp: Date.now()
+        };
+        localStorage.setItem('selectedComplaint', JSON.stringify(complaintToSave));
+        
+        // Navigate to the general complaints details page with the complaint ID
+        window.location.href = `/general complaints/details.html?id=${complaintId}`;
+      } else {
+        throw new Error('Failed to load complaint details');
+      }
+    } else {
+      throw new Error(`HTTP ${response.status}`);
+    }
   } catch (error) {
-    console.error('Error navigating to complaint details:', error);
+    console.error('Error loading complaint details:', error);
     alert('Error opening complaint details. Please try again.');
   }
 }
