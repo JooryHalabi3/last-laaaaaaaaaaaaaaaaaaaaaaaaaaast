@@ -4,28 +4,7 @@ let assignedComplaints = [];
 let notifications = [];
 let currentLang = localStorage.getItem('lang') || 'ar';
 
-// API Base URL
-const API_BASE_URL = 'http://localhost:3001/api';
-
-// الحصول على token من storage
-function getAuthToken() {
-    return localStorage.getItem('token') || sessionStorage.getItem('token');
-}
-
-// دالة عامة للنداء على الباك-إند
-async function fetchFromAPI(endpoint, options = {}) {
-    try {
-        const token = getAuthToken();
-        const headers = { 'Content-Type': 'application/json', ...options.headers };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
-        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        return await response.json();
-    } catch (error) {
-        console.error(`خطأ في جلب البيانات من ${endpoint}:`, error);
-        throw error;
-    }
-}
+// ...existing code...
 
 // حساب الوقت المتبقي + SLA
 function calculateTimeRemaining(deadline) {
@@ -100,84 +79,17 @@ async function initializePage() {
     }
 }
 
-async function checkAuthentication() {
-    const user = JSON.parse(localStorage.getItem('user') || 'null');
-    
-    // For testing purposes, create mock user if no user data exists
-    if (!user) {
-        console.warn('No user data found, creating mock user for testing');
-        currentUser = {
-            Username: 'ahmed.ali',
-            FullName: 'أحمد محمد علي',
-            RoleID: 2,
-            roleId: 2,
-            token: 'mock-token-for-testing',
-            Department: 'قسم الشكاوى',
-            Position: 'موظف معالجة شكاوى'
-        };
-        return;
-    }
-    
-    // Check if user is employee (roleId = 2)
-    if (user.RoleID !== 2 && user.roleId !== 2) {
-        showError('غير مصرح لك بالوصول لهذه الصفحة');
-        setTimeout(() => {
-            window.location.href = '../login/login.html';
-        }, 2000);
-        return;
-    }
-    
-    currentUser = user;
-}
+// ...existing code...
 
-async function loadUserData() {
-    try {
-        // For testing purposes, add mock data if server is not available
-        if (!currentUser || !currentUser.token) {
-            console.warn('No user token available, using mock user data');
-            const mockUserData = {
-                FullName: 'أحمد محمد علي',
-                Username: 'ahmed.ali',
-                Department: 'قسم الشكاوى',
-                Position: 'موظف معالجة شكاوى'
-            };
-            updateUserDisplay(mockUserData);
-            return;
-        }
-
-        const response = await fetch(`${API_BASE_URL}/employee/profile`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to load user data: ${response.status}`);
-        }
-
-        const userData = await response.json();
-        updateUserDisplay(userData);
-        
-    } catch (error) {
-        console.error('Error loading user data:', error);
-        
-        // If it's a network error or server is down, use mock data for testing
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            console.warn('Server not available, using mock user data for testing');
-            const mockUserData = {
-                FullName: 'أحمد محمد علي',
-                Username: 'ahmed.ali',
-                Department: 'قسم الشكاوى',
-                Position: 'موظف معالجة شكاوى'
-            };
-            updateUserDisplay(mockUserData);
-        } else {
-            // Use fallback data
-            updateUserDisplay({ FullName: currentUser?.Username || 'موظف' });
-        }
-    }
+function loadUserData() {
+    // بيانات ثابتة للواجهة فقط
+    const mockUserData = {
+        FullName: 'أحمد محمد علي',
+        Username: 'ahmed.ali',
+        Department: 'قسم الشكاوى',
+        Position: 'موظف معالجة شكاوى'
+    };
+    updateUserDisplay(mockUserData);
 }
 
 function updateUserDisplay(userData) {
@@ -192,54 +104,15 @@ function updateUserDisplay(userData) {
     }
 }
 
-async function loadAssignedComplaintsStats() {
-    try {
-        // For testing purposes, add mock data if server is not available
-        if (!currentUser || !currentUser.token) {
-            console.warn('No user token available, using mock statistics');
-            const mockStats = {
-                total: 3,
-                pending: 2,
-                completed: 1,
-                urgent: 1
-            };
-            updateStatisticsDisplay(mockStats);
-            return;
-        }
-
-        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints/stats`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to load assigned complaints statistics: ${response.status}`);
-        }
-
-        const stats = await response.json();
-        updateStatisticsDisplay(stats);
-        
-    } catch (error) {
-        console.error('Error loading assigned complaints statistics:', error);
-        
-        // If it's a network error or server is down, use mock data for testing
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            console.warn('Server not available, using mock statistics for testing');
-            const mockStats = {
-                total: 3,
-                pending: 2,
-                completed: 1,
-                urgent: 1
-            };
-            updateStatisticsDisplay(mockStats);
-        } else {
-            // Set default values
-            updateStatisticsDisplay({ total: 0, pending: 0, completed: 0, urgent: 0 });
-        }
-    }
+function loadAssignedComplaintsStats() {
+    // بيانات ثابتة للواجهة فقط
+    const mockStats = {
+        total: 3,
+        pending: 2,
+        completed: 1,
+        urgent: 1
+    };
+    updateStatisticsDisplay(mockStats);
 }
 
 function updateStatisticsDisplay(stats) {
@@ -259,94 +132,30 @@ function updateStatisticsDisplay(stats) {
     });
 }
 
-async function loadRecentAssignedComplaints() {
-    try {
-        // For testing purposes, add mock data if server is not available
-        if (!currentUser || !currentUser.token) {
-            console.warn('No user token available, using mock complaints');
-            const mockComplaints = [
-                {
-                    ComplaintID: 123,
-                    ComplaintDetails: 'شكوى حول سوء الخدمة في قسم الطوارئ - المريض ينتظر أكثر من ساعتين دون معالجة',
-                    CurrentStatus: 'جديدة',
-                    AssignedAt: new Date().toISOString(),
-                    Priority: 'عالية',
-                    DepartmentName: 'قسم الطوارئ',
-                    ComplaintTypeName: 'شكوى خدمة'
-                },
-                {
-                    ComplaintID: 124,
-                    ComplaintDetails: 'شكوى حول نظافة الغرفة - الغرفة غير نظيفة والمرضى يشكون من ذلك',
-                    CurrentStatus: 'قيد المعالجة',
-                    AssignedAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-                    Priority: 'متوسطة',
-                    DepartmentName: 'قسم التنظيف',
-                    ComplaintTypeName: 'شكوى نظافة'
-                },
-                {
-                    ComplaintID: 125,
-                    ComplaintDetails: 'شكوى حول الطعام - الطعام بارد وغير مستساغ',
-                    CurrentStatus: 'تم الحل',
-                    AssignedAt: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-                    Priority: 'منخفضة',
-                    DepartmentName: 'قسم التغذية',
-                    ComplaintTypeName: 'شكوى طعام'
-                }
-            ];
-            assignedComplaints = mockComplaints;
-            displayRecentComplaints(mockComplaints);
-            return;
+function loadRecentAssignedComplaints() {
+    // بيانات ثابتة للواجهة فقط
+    const mockComplaints = [
+        {
+            ComplaintID: 123,
+            ComplaintDetails: 'شكوى حول سوء الخدمة في قسم الطوارئ - المريض ينتظر أكثر من ساعتين دون معالجة',
+            CurrentStatus: 'جديدة',
+            AssignedAt: new Date().toISOString(),
+            Priority: 'عالية',
+            DepartmentName: 'قسم الطوارئ',
+            ComplaintTypeName: 'شكوى خدمة'
+        },
+        {
+            ComplaintID: 124,
+            ComplaintDetails: 'شكوى حول نظافة الغرفة - الغرفة غير نظيفة والمرضى يشكون من ذلك',
+            CurrentStatus: 'قيد المعالجة',
+            AssignedAt: new Date(Date.now() - 86400000).toISOString(),
+            Priority: 'متوسطة',
+            DepartmentName: 'قسم التنظيف',
+            ComplaintTypeName: 'شكوى نظافة'
         }
-
-        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints/recent`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to load recent assigned complaints: ${response.status}`);
-        }
-
-        const complaints = await response.json();
-        assignedComplaints = complaints;
-        
-        displayRecentComplaints(complaints);
-        
-    } catch (error) {
-        console.error('Error loading recent assigned complaints:', error);
-        
-        // If it's a network error or server is down, use mock data for testing
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            console.warn('Server not available, using mock complaints for testing');
-            const mockComplaints = [
-                {
-                    ComplaintID: 123,
-                    ComplaintDetails: 'شكوى حول سوء الخدمة في قسم الطوارئ - المريض ينتظر أكثر من ساعتين دون معالجة',
-                    CurrentStatus: 'جديدة',
-                    AssignedAt: new Date().toISOString(),
-                    Priority: 'عالية',
-                    DepartmentName: 'قسم الطوارئ',
-                    ComplaintTypeName: 'شكوى خدمة'
-                },
-                {
-                    ComplaintID: 124,
-                    ComplaintDetails: 'شكوى حول نظافة الغرفة - الغرفة غير نظيفة والمرضى يشكون من ذلك',
-                    CurrentStatus: 'قيد المعالجة',
-                    AssignedAt: new Date(Date.now() - 86400000).toISOString(),
-                    Priority: 'متوسطة',
-                    DepartmentName: 'قسم التنظيف',
-                    ComplaintTypeName: 'شكوى نظافة'
-                }
-            ];
-            assignedComplaints = mockComplaints;
-            displayRecentComplaints(mockComplaints);
-        } else {
-            displayRecentComplaints([]);
-        }
-    }
+    ];
+    assignedComplaints = mockComplaints;
+    displayRecentComplaints(mockComplaints);
 }
 
 function displayRecentComplaints(complaints) {
@@ -400,70 +209,18 @@ function getStatusClass(status) {
     }
 }
 
-async function loadNotifications() {
-    try {
-        // For testing purposes, add some mock notifications if server is not available
-        if (!currentUser || !currentUser.token) {
-            console.warn('No user token available, using mock data');
-            notifications = [
-                {
-                    ID: 1,
-                    Title: 'شكوى جديدة مسندة إليك',
-                    Body: 'تم إسناد شكوى جديدة برقم #123 إليك للمعالجة',
-                    IsRead: false,
-                    CreatedAt: new Date().toISOString()
-                }
-            ];
-            updateNotificationBadge();
-            return;
+function loadNotifications() {
+    // بيانات ثابتة للواجهة فقط
+    notifications = [
+        {
+            ID: 1,
+            Title: 'شكوى جديدة مسندة إليك',
+            Body: 'تم إسناد شكوى جديدة برقم #123 إليك للمعالجة',
+            IsRead: false,
+            CreatedAt: new Date().toISOString()
         }
-
-        const response = await fetch(`${API_BASE_URL}/employee/notifications`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to load notifications: ${response.status}`);
-        }
-
-        const data = await response.json();
-        notifications = data.notifications || [];
-        
-        updateNotificationBadge();
-        
-    } catch (error) {
-        console.error('Error loading notifications:', error);
-        
-        // If it's a network error or server is down, use mock data for testing
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            console.warn('Server not available, using mock notifications for testing');
-            notifications = [
-                {
-                    ID: 1,
-                    Title: 'شكوى جديدة مسندة إليك',
-                    Body: 'تم إسناد شكوى جديدة برقم #123 إليك للمعالجة',
-                    IsRead: false,
-                    CreatedAt: new Date().toISOString()
-                },
-                {
-                    ID: 2,
-                    Title: 'تحديث حالة شكوى',
-                    Body: 'تم تحديث حالة الشكوى رقم #456 إلى "قيد المعالجة"',
-                    IsRead: true,
-                    CreatedAt: new Date(Date.now() - 86400000).toISOString() // 1 day ago
-                }
-            ];
-            updateNotificationBadge();
-        } else {
-            // Set default values and hide badge
-            notifications = [];
-            updateNotificationBadge();
-        }
-    }
+    ];
+    updateNotificationBadge();
 }
 
 function updateNotificationBadge() {
