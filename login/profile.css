@@ -1,32 +1,41 @@
+/* ===== Base Styles ===== */
 body {
   margin: 0;
+  padding: 0;
   background: #f9fbfd;
-  direction: rtl;
   color: #333;
-  font-family: 'Tajawal', sans-serif;
+  direction: rtl;
+  line-height: 1.6;
+  box-sizing: border-box;
 }
 
 body.lang-ar {
   font-family: 'Tajawal', sans-serif !important;
+  text-align: right;
 }
 
 body.lang-en {
   font-family: 'Merriweather', serif !important;
-  direction: ltr;
   text-align: left;
+  direction: ltr;
 }
 
-/* الهيدر */
+/* ===== Header Styles ===== */
 .header {
-  background-color: white;
+  background-color: #ffffff;
   padding: 15px 30px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid #e9ecef;
+  position: relative;
+  z-index: 1000;
 }
 
 .header-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .header-title {

@@ -1,37 +1,45 @@
+/* ===== Base Styles ===== */
 body {
   margin: 0;
+  padding: 0;
   background: #f9fbfd;
-  direction: rtl;
   color: #333;
+  direction: rtl;
+  line-height: 1.6;
+  box-sizing: border-box;
 }
 
 body.lang-ar {
   font-family: 'Tajawal', sans-serif !important;
+  text-align: right;
 }
 
 body.lang-en {
   font-family: 'Merriweather', serif !important;
+  text-align: left;
 }
 
-
-
-
+/* ===== Language Toggle Button ===== */
 .lang-toggle-btn {
-  background-color: #3686cbbc; /* أزرق */
+  background-color: #3686cb;
   color: #ffffff;
   border: none;
   border-radius: 12px;
-  padding: 8px 16px;
+  padding: 10px 16px;
   display: flex;
   align-items: center;
   gap: 10px;
   font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.3s ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(54, 134, 203, 0.2);
 }
 
 .lang-toggle-btn:hover {
-  background-color: #1565c0; /* أزرق غامق عند الهوفر */
+  background-color: #1565c0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(54, 134, 203, 0.3);
 }
 
 .lang-icon {
