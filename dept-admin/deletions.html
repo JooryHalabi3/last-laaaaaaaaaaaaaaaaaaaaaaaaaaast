@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title data-ar="طلبات الحذف — الأدمن" data-en="Deletion Requests — Admin">طلبات الحذف — الأدمن</title>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
+
+  <!-- Page CSS -->
+  <link rel="stylesheet" href="deletions.css" />
+</head>
+<body class="lang-ar">
+  <!-- Back -->
+  <div class="back-button">
+    <a href="#" onclick="goBack()">
+      <img src="/icon/Back.png" alt="Back Icon" class="back-icon" />
+      <span data-ar="عودة" data-en="Back">عودة</span>
+    </a>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="header-title" data-ar="عُــــــونَك — طلبات الحذف" data-en="AOUNAK — Deletions">عُــــــونَك — طلبات الحذف</div>
+      <img src="/icon/hospital-logo.png" alt="شعار" class="header-logo"/>
+      <button id="langToggle" class="lang-toggle-btn">
+        <img src="/icon/lang.png" alt="language" class="lang-icon" />
+        <span id="langText">العربية | English</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Page title & hint -->
+    <div class="page-head">
+      <h1 class="title" data-ar="طلبات الحذف (مرحلة الأدمن)" data-en="Deletion Requests (Admin Stage)">طلبات الحذف (مرحلة الأدمن)</h1>
+      <p class="subtitle" data-ar="راجع الطلبات و أكدها ليتم إرسالها للسوبر أدمن" data-en="Review and confirm requests to send them to Super Admin">راجع الطلبات و أكدها ليتم إرسالها للسوبر أدمن</p>
+    </div>
+
+    <!-- Quick stats -->
+    <div class="stats-cards">
+      <div class="stat-card">
+        <div class="stat-num" id="statPending">0</div>
+        <div class="stat-label" data-ar="معلّقة" data-en="Pending">معلّقة</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statConfirmed">0</div>
+        <div class="stat-label" data-ar="مؤكدة من الأدمن" data-en="Admin Confirmed">مؤكدة من الأدمن</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statRejected">0</div>
+        <div class="stat-label" data-ar="مرفوضة" data-en="Rejected">مرفوضة</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <section class="filters">
+      <div class="filter-row">
+        <div class="filter-group">
+          <label data-ar="من" data-en="From">من</label>
+          <input type="date" class="filter-input" id="dateFrom" />
+        </div>
+        <div class="filter-group">
+          <label data-ar="إلى" data-en="To">إلى</label>
+          <input type="date" class="filter-input" id="dateTo" />
+        </div>
+        <div class="filter-group">
+          <label data-ar="الكيان" data-en="Entity">الكيان</label>
+          <select class="filter-input" id="entityFilter">
+            <option value="" data-ar="الكل" data-en="All">الكل</option>
+            <option value="users" data-ar="مستخدم" data-en="User">مستخدم</option>
+            <option value="complaints" data-ar="شكوى" data-en="Complaint">شكوى</option>
+            <option value="attachments" data-ar="مرفق" data-en="Attachment">مرفق</option>
+            <option value="featured" data-ar="مميّز" data-en="Featured">مميّز</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label data-ar="الحالة" data-en="Status">الحالة</label>
+          <select class="filter-input" id="statusFilter">
+            <option value="" data-ar="الكل" data-en="All">الكل</option>
+            <option value="pending" data-ar="معلّقة" data-en="Pending">معلّقة</option>
+            <option value="admin_confirmed" data-ar="مؤكدة (أدمن)" data-en="Admin Confirmed">مؤكدة (أدمن)</option>
+            <option value="approved" data-ar="معتمدة" data-en="Approved">معتمدة</option>
+            <option value="rejected" data-ar="مرفوضة" data-en="Rejected">مرفوضة</option>
+          </select>
+        </div>
+        <div class="filter-group grow">
+          <label data-ar="بحث" data-en="Search">بحث</label>
+          <input type="text" class="filter-input" id="q" placeholder="سبب/اسم/رقم..." />
+        </div>
+        <div class="filter-actions">
+          <button class="btn primary" id="applyFiltersBtn" data-ar="تطبيق" data-en="Apply">تطبيق</button>
+          <button class="btn ghost" id="resetFiltersBtn" data-ar="مسح" data-en="Reset">مسح</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Table -->
+    <section class="table-wrap">
+      <div class="table-head">
+        <h3 data-ar="قائمة الطلبات" data-en="Requests List">قائمة الطلبات</h3>
+        <div class="table-actions">
+          <button class="btn outline" id="bulkConfirmBtn" data-ar="تأكيد المحدد" data-en="Confirm Selected">تأكيد المحدد</button>
+        </div>
+      </div>
+      <div class="table-scroller">
+        <table class="data-table" id="deletionsTable">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="checkAll"></th>
+              <th data-ar="رقم الطلب" data-en="Request #">رقم الطلب</th>
+              <th data-ar="الكيان" data-en="Entity">الكيان</th>
+              <th data-ar="السجل" data-en="Record">السجل</th>
+              <th data-ar="السبب" data-en="Reason">السبب</th>
+              <th data-ar="طُلب بواسطة" data-en="Requested By">طُلب بواسطة</th>
+              <th data-ar="التاريخ" data-en="Requested At">التاريخ</th>
+              <th data-ar="حالة الأدمن" data-en="Admin Stage">حالة الأدمن</th>
+              <th data-ar="الحالة الحالية" data-en="Current Status">الحالة الحالية</th>
+              <th data-ar="إجراءات" data-en="Actions">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- تُملأ لاحقاً عبر JS -->
+            <tr class="empty-row">
+              <td colspan="10" data-ar="لا توجد بيانات للعرض" data-en="No data to display">لا توجد بيانات للعرض</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Snapshot Modal -->
+  <div class="modal" id="snapshotModal" aria-hidden="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 data-ar="معاينة السجل" data-en="Record Snapshot">معاينة السجل</h3>
+        <button class="modal-close" data-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <pre class="snapshot-box" id="snapshotBox">{}</pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn ghost" data-close data-ar="إغلاق" data-en="Close">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Confirm Modal -->
+  <div class="modal" id="confirmModal" aria-hidden="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 data-ar="تأكيد طلب الحذف" data-en="Confirm Deletion Request">تأكيد طلب الحذف</h3>
+        <button class="modal-close" data-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="confirm-text" data-ar="هل تؤكد إرسال طلب الحذف للاعتماد النهائي من السوبر أدمن؟" data-en="Confirm sending this deletion request for Super Admin approval?">
+          هل تؤكد إرسال طلب الحذف للاعتماد النهائي من السوبر أدمن؟
+        </p>
+        <label class="confirm-checkbox">
+          <input type="checkbox" id="adminConfirmAcknowledge">
+          <span data-ar="أقرّ بتحمل تبعات هذا الطلب" data-en="I acknowledge responsibility for this request">أقرّ بتحمل تبعات هذا الطلب</span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn ghost" data-close data-ar="إلغاء" data-en="Cancel">إلغاء</button>
+        <button class="btn danger" id="confirmSendBtn" disabled data-ar="تأكيد الإرسال" data-en="Confirm & Send">تأكيد الإرسال</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Placeholder for page JS (to be implemented later) -->
+  <script src="deletions.js"></script>
+</body>
+</html>
