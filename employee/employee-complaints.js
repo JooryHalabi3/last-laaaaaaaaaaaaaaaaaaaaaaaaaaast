@@ -1,657 +1,422 @@
-// Global variables
-let currentUser = null;
-let assignedComplaints = [];
-let currentPage = 1;
-let totalPages = 1;
-let currentFilters = {
-    status: '',
-    priority: '',
-    search: ''
+/** ====== Config & Helpers ====== */
+const API_BASE_URL = 'http://localhost:3001/api';
+const EMP_BASE = `${API_BASE_URL}/employee`;
+
+const state = {
+  page: 1,
+  limit: 10,
+  sortBy: 'newest',
+  filters: { status: '', priority: '', q: '' },
+  totalPages: 1,
+  currentList: []
 };
-let currentSort = 'newest';
-let selectedComplaint = null;
 
-// API Base URL
-const API_BASE_URL = 'http://localhost:3000/api';
+// مطابق لخيارات الواجهة ولكن يراعي الحالات الفعلية في الباك-إند
+// Controller يسمح: 'مفتوحة/جديدة', 'قيد المعالجة', 'معلقة', 'مكتملة'  (للتحديث كذلك) 
+// سنحوّل اختيارات المستخدم لهذه القيم. :contentReference[oaicite:9]{index=9}
+const statusMapUItoAPI = {
+  '': '',
+  'جديدة': 'مفتوحة/جديدة',
+  'قيد المعالجة': 'قيد المعالجة',
+  'قيد المراجعة': 'معلقة',
+  'تم الحل': 'مكتملة',
+  'مغلقة': 'مكتملة' // لا توجد حالة "مغلقة" في الكنترولر، نقرّبها إلى مكتملة.
+};
 
-// Initialize the page
-document.addEventListener('DOMContentLoaded', function() {
-    initializePage();
-});
-
-async function initializePage() {
-    try {
-        showLoading();
-        
-        // Check authentication
-        await checkAuthentication();
-        
-        // Load user data
-        await loadUserData();
-        
-        // Load assigned complaints
-        await loadAssignedComplaints();
-        
-        // Load statistics
-        await loadStatistics();
-        
-        // Setup event listeners
-        setupEventListeners();
-        
-        hideLoading();
-    } catch (error) {
-        console.error('Error initializing page:', error);
-        showError('حدث خطأ أثناء تحميل الصفحة');
-        hideLoading();
-    }
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
 }
 
-async function checkAuthentication() {
-    const user = JSON.parse(localStorage.getItem('user') || 'null');
-    if (!user) {
-        window.location.href = '../login/login.html';
-        return;
-    }
-    
-    // Check if user is employee (roleId = 2)
-    if (user.RoleID !== 2 && user.roleId !== 2) {
-        showError('غير مصرح لك بالوصول لهذه الصفحة');
-        setTimeout(() => {
-            window.location.href = '../login/login.html';
-        }, 2000);
-        return;
-    }
-    
-    currentUser = user;
-}
-
-async function loadUserData() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/employee/profile`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to load user data');
-        }
-
-        const userData = await response.json();
-        
-        // Update UI with user data
-        document.getElementById('userName').textContent = userData.FullName || currentUser.Username;
-        document.getElementById('userAvatar').src = '../icon/person.png';
-        
-    } catch (error) {
-        console.error('Error loading user data:', error);
-        // Use fallback data
-        document.getElementById('userName').textContent = currentUser.Username;
-        document.getElementById('userAvatar').src = '../icon/person.png';
-    }
-}
-
-async function loadAssignedComplaints() {
-    try {
-        const params = new URLSearchParams({
-            page: currentPage,
-            status: currentFilters.status,
-            priority: currentFilters.priority,
-            search: currentFilters.search,
-            sort: currentSort
-        });
-
-        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints?${params}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to load assigned complaints');
-        }
-
-        const data = await response.json();
-        assignedComplaints = data.complaints || [];
-        totalPages = data.totalPages || 1;
-        
-        displayComplaints(assignedComplaints);
-        updatePagination();
-        updateResultsCount();
-        
-    } catch (error) {
-        console.error('Error loading assigned complaints:', error);
-        showError('حدث خطأ أثناء تحميل الشكاوى');
-        displayComplaints([]);
-    }
-}
-
-function displayComplaints(complaints) {
-    const container = document.getElementById('complaintsList');
-    
-    if (complaints.length === 0) {
-        container.innerHTML = `
-            <div class="complaint-card">
-                <div class="complaint-header">
-                    <div>
-                        <div class="complaint-title">لا توجد شكاوى مسندة إليك</div>
-                        <div class="complaint-meta">ستظهر هنا الشكاوى التي يتم إسنادها إليك من قبل الإدارة</div>
-                    </div>
-                </div>
-            </div>
-        `;
-        return;
-    }
-    
-    const complaintsHTML = complaints.map(complaint => `
-        <div class="complaint-card" onclick="viewComplaintDetails(${complaint.ComplaintID})">
-            <div class="complaint-header">
-                <div>
-                    <div class="complaint-title">شكوى رقم ${complaint.ComplaintID}</div>
-                    <div class="complaint-meta">
-                        <span>تاريخ الإسناد: ${formatDate(complaint.AssignedAt)}</span>
-                        <span>الأولوية: ${complaint.Priority}</span>
-                    </div>
-                </div>
-                <div class="complaint-status status-${getStatusClass(complaint.CurrentStatus)}">
-                    ${complaint.CurrentStatus}
-                </div>
-            </div>
-            <div class="complaint-details">
-                ${complaint.ComplaintDetails.substring(0, 200)}${complaint.ComplaintDetails.length > 200 ? '...' : ''}
-            </div>
-            <div class="complaint-footer">
-                <div class="complaint-meta">
-                    <span>القسم: ${complaint.DepartmentName || 'غير محدد'}</span>
-                    <span>النوع: ${complaint.ComplaintTypeName || 'غير محدد'}</span>
-                </div>
-                <div class="complaint-actions">
-                    <button class="action-btn action-btn-primary" onclick="event.stopPropagation(); viewComplaintDetails(${complaint.ComplaintID})">
-                        <i class="fas fa-eye"></i>
-                        عرض التفاصيل
-                    </button>
-                </div>
-            </div>
-        </div>
-    `).join('');
-    
-    container.innerHTML = complaintsHTML;
-}
-
-function getStatusClass(status) {
-    switch (status) {
-        case 'جديدة':
-            return 'new';
-        case 'قيد المعالجة':
-            return 'pending';
-        case 'قيد المراجعة':
-            return 'review';
-        case 'تم الحل':
-            return 'completed';
-        case 'مغلقة':
-            return 'closed';
-        default:
-            return 'pending';
-    }
-}
-
-async function loadStatistics() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints/stats`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to load statistics');
-        }
-
-        const stats = await response.json();
-        
-        // Update statistics
-        document.getElementById('totalCount').textContent = stats.total || 0;
-        document.getElementById('pendingCount').textContent = stats.pending || 0;
-        document.getElementById('completedCount').textContent = stats.completed || 0;
-        document.getElementById('urgentCount').textContent = stats.urgent || 0;
-        
-    } catch (error) {
-        console.error('Error loading statistics:', error);
-        // Set default values
-        document.getElementById('totalCount').textContent = '0';
-        document.getElementById('pendingCount').textContent = '0';
-        document.getElementById('completedCount').textContent = '0';
-        document.getElementById('urgentCount').textContent = '0';
-    }
-}
-
-function setupEventListeners() {
-    // Profile link
-    document.getElementById('profileLink').addEventListener('click', function(e) {
-        e.preventDefault();
-        window.location.href = '../login/profile.html';
-    });
-    
-    // Logout button
-    document.getElementById('logoutBtn').addEventListener('click', function(e) {
-        e.preventDefault();
-        logout();
-    });
-    
-    // New complaint button
-    document.getElementById('newComplaintBtn').addEventListener('click', function() {
-        window.location.href = '../New complaint/Newcomplaint.html';
-    });
-    
-    // Filter events
-    document.getElementById('statusFilter').addEventListener('change', function() {
-        currentFilters.status = this.value;
-        currentPage = 1;
-        loadAssignedComplaints();
-    });
-    
-    document.getElementById('priorityFilter').addEventListener('change', function() {
-        currentFilters.priority = this.value;
-        currentPage = 1;
-        loadAssignedComplaints();
-    });
-    
-    document.getElementById('searchInput').addEventListener('input', debounce(function() {
-        currentFilters.search = this.value;
-        currentPage = 1;
-        loadAssignedComplaints();
-    }, 500));
-    
-    // Sort events
-    document.getElementById('sortBy').addEventListener('change', function() {
-        currentSort = this.value;
-        currentPage = 1;
-        loadAssignedComplaints();
-    });
-    
-    // Clear filters
-    document.getElementById('clearFilters').addEventListener('click', function() {
-        document.getElementById('statusFilter').value = '';
-        document.getElementById('priorityFilter').value = '';
-        document.getElementById('searchInput').value = '';
-        currentFilters = { status: '', priority: '', search: '' };
-        currentPage = 1;
-        loadAssignedComplaints();
-    });
-    
-    // Modal close buttons
-    document.getElementById('closeErrorModal').addEventListener('click', hideError);
-    document.getElementById('closeErrorBtn').addEventListener('click', hideError);
-    document.getElementById('closeDetailsModal').addEventListener('click', hideDetailsModal);
-    document.getElementById('closeDetailsBtn').addEventListener('click', hideDetailsModal);
-    document.getElementById('closeResponseModal').addEventListener('click', hideResponseModal);
-    document.getElementById('closeStatusModal').addEventListener('click', hideStatusModal);
-    
-    // Modal backdrop clicks
-    document.getElementById('errorModal').addEventListener('click', function(e) {
-        if (e.target === this) hideError();
-    });
-    
-    document.getElementById('detailsModal').addEventListener('click', function(e) {
-        if (e.target === this) hideDetailsModal();
-    });
-    
-    document.getElementById('responseModal').addEventListener('click', function(e) {
-        if (e.target === this) hideResponseModal();
-    });
-    
-    document.getElementById('statusModal').addEventListener('click', function(e) {
-        if (e.target === this) hideStatusModal();
-    });
-    
-    // Response modal buttons
-    document.getElementById('submitResponseBtn').addEventListener('click', submitResponse);
-    document.getElementById('cancelResponseBtn').addEventListener('click', hideResponseModal);
-    
-    // Status modal buttons
-    document.getElementById('submitStatusBtn').addEventListener('click', updateStatus);
-    document.getElementById('cancelStatusBtn').addEventListener('click', hideStatusModal);
-    
-    // Details modal buttons
-    document.getElementById('respondBtn').addEventListener('click', showResponseModal);
-    document.getElementById('updateStatusBtn').addEventListener('click', showStatusModal);
-}
-
-function viewComplaintDetails(complaintId) {
-    const complaint = assignedComplaints.find(c => c.ComplaintID === complaintId);
-    if (!complaint) {
-        showError('لم يتم العثور على الشكوى');
-        return;
-    }
-    
-    selectedComplaint = complaint;
-    displayComplaintDetails(complaint);
-    showDetailsModal();
-}
-
-async function displayComplaintDetails(complaint) {
-    try {
-        // Load full complaint details including responses
-        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints/${complaint.ComplaintID}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to load complaint details');
-        }
-
-        const data = await response.json();
-        const fullComplaint = data.complaint;
-        const responses = data.responses || [];
-        
-        const detailsHTML = `
-            <div class="complaint-detail-item">
-                <h4>معلومات الشكوى</h4>
-                <p><strong>رقم الشكوى:</strong> ${fullComplaint.ComplaintID}</p>
-                <p><strong>التاريخ:</strong> ${formatDate(fullComplaint.ComplaintDate)}</p>
-                <p><strong>الحالة:</strong> ${fullComplaint.CurrentStatus}</p>
-                <p><strong>الأولوية:</strong> ${fullComplaint.Priority}</p>
-                <p><strong>القسم:</strong> ${fullComplaint.DepartmentName || 'غير محدد'}</p>
-                <p><strong>النوع:</strong> ${fullComplaint.ComplaintTypeName || 'غير محدد'}</p>
-            </div>
-            
-            <div class="complaint-detail-item">
-                <h4>تفاصيل الشكوى</h4>
-                <p>${fullComplaint.ComplaintDetails}</p>
-            </div>
-            
-            <div class="complaint-detail-item">
-                <h4>معلومات المريض</h4>
-                <p><strong>الاسم:</strong> ${fullComplaint.PatientName || 'غير محدد'}</p>
-                <p><strong>رقم الهوية:</strong> ${fullComplaint.PatientNationalID || 'غير محدد'}</p>
-                <p><strong>رقم الاتصال:</strong> ${fullComplaint.PatientContact || 'غير محدد'}</p>
-            </div>
-            
-            <div class="complaint-responses">
-                <h4>الردود والتعليقات</h4>
-                ${responses.length > 0 ? responses.map(response => `
-                    <div class="response-item">
-                        <div class="response-header">
-                            <div>
-                                <span class="response-author">${response.EmployeeName || 'موظف'}</span>
-                                <span class="response-type">${response.ResponseType}</span>
-                            </div>
-                            <span class="response-date">${formatDate(response.ResponseDate)}</span>
-                        </div>
-                        <div class="response-text">${response.ResponseText}</div>
-                    </div>
-                `).join('') : '<p>لا توجد ردود بعد</p>'}
-            </div>
-        `;
-        
-        document.getElementById('complaintDetails').innerHTML = detailsHTML;
-        
-    } catch (error) {
-        console.error('Error loading complaint details:', error);
-        showError('حدث خطأ أثناء تحميل تفاصيل الشكوى');
-    }
-}
-
-function showResponseModal() {
-    if (!selectedComplaint) {
-        showError('لم يتم تحديد شكوى');
-        return;
-    }
-    
-    document.getElementById('responseText').value = '';
-    document.getElementById('responseType').value = 'رد رسمي';
-    document.getElementById('responseModal').style.display = 'flex';
-}
-
-function hideResponseModal() {
-    document.getElementById('responseModal').style.display = 'none';
-}
-
-async function submitResponse() {
-    const responseText = document.getElementById('responseText').value.trim();
-    const responseType = document.getElementById('responseType').value;
-    
-    if (!responseText) {
-        showError('يرجى كتابة الرد');
-        return;
-    }
-    
-    try {
-        showLoading();
-        
-        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints/${selectedComplaint.ComplaintID}/respond`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                responseText,
-                responseType
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to submit response');
-        }
-
-        hideResponseModal();
-        hideDetailsModal();
-        
-        // Reload complaints to show updated data
-        await loadAssignedComplaints();
-        await loadStatistics();
-        
-        showSuccess('تم إرسال الرد بنجاح');
-        
-    } catch (error) {
-        console.error('Error submitting response:', error);
-        showError('حدث خطأ أثناء إرسال الرد');
-    } finally {
-        hideLoading();
-    }
-}
-
-function showStatusModal() {
-    if (!selectedComplaint) {
-        showError('لم يتم تحديد شكوى');
-        return;
-    }
-    
-    document.getElementById('newStatus').value = selectedComplaint.CurrentStatus;
-    document.getElementById('statusRemarks').value = '';
-    document.getElementById('statusModal').style.display = 'flex';
-}
-
-function hideStatusModal() {
-    document.getElementById('statusModal').style.display = 'none';
-}
-
-async function updateStatus() {
-    const newStatus = document.getElementById('newStatus').value;
-    const remarks = document.getElementById('statusRemarks').value.trim();
-    
-    if (!newStatus) {
-        showError('يرجى اختيار الحالة الجديدة');
-        return;
-    }
-    
-    try {
-        showLoading();
-        
-        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints/${selectedComplaint.ComplaintID}/status`, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                newStatus,
-                remarks
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to update status');
-        }
-
-        hideStatusModal();
-        hideDetailsModal();
-        
-        // Reload complaints to show updated data
-        await loadAssignedComplaints();
-        await loadStatistics();
-        
-        showSuccess('تم تحديث الحالة بنجاح');
-        
-    } catch (error) {
-        console.error('Error updating status:', error);
-        showError('حدث خطأ أثناء تحديث الحالة');
-    } finally {
-        hideLoading();
-    }
-}
-
-function showDetailsModal() {
-    document.getElementById('detailsModal').style.display = 'flex';
-}
-
-function hideDetailsModal() {
-    document.getElementById('detailsModal').style.display = 'none';
-    selectedComplaint = null;
-}
-
-function updatePagination() {
-    const pagination = document.getElementById('pagination');
-    
-    if (totalPages <= 1) {
-        pagination.innerHTML = '';
-        return;
-    }
-    
-    let paginationHTML = '';
-    
-    // Previous button
-    paginationHTML += `
-        <button ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})">
-            <i class="fas fa-chevron-right"></i>
-            السابق
-        </button>
-    `;
-    
-    // Page numbers
-    for (let i = 1; i <= totalPages; i++) {
-        if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
-            paginationHTML += `
-                <button class="${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">
-                    ${i}
-                </button>
-            `;
-        } else if (i === currentPage - 3 || i === currentPage + 3) {
-            paginationHTML += '<span>...</span>';
-        }
-    }
-    
-    // Next button
-    paginationHTML += `
-        <button ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})">
-            التالي
-            <i class="fas fa-chevron-left"></i>
-        </button>
-    `;
-    
-    pagination.innerHTML = paginationHTML;
-}
-
-function changePage(page) {
-    if (page < 1 || page > totalPages) return;
-    
-    currentPage = page;
-    loadAssignedComplaints();
-}
-
-function updateResultsCount() {
-    const count = assignedComplaints.length;
-    document.getElementById('resultsCount').textContent = `${count} شكوى`;
-}
-
-function logout() {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
+function guardEmployee(){
+  const userRaw = localStorage.getItem('user');
+  const token = localStorage.getItem('token');
+  if (!token || !userRaw) {
     window.location.href = '../login/login.html';
-}
-
-function formatDate(dateString) {
-    if (!dateString) return '';
-    
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ar-SA', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
+    return false;
+  }
+  const user = JSON.parse(userRaw);
+  if (Number(user.RoleID) !== 2 && user.Username?.toLowerCase() !== 'employee'){
+    window.location.href = '../login/home.html';
+    return false;
+  }
+  // إظهار اسم المستخدم في الهيدر
+  const nameEl = document.getElementById('userName');
+  if (nameEl) nameEl.textContent = user.FullName || user.Username || 'الموظف';
+  return true;
 }
 
 function showLoading() {
-    document.getElementById('loadingOverlay').style.display = 'flex';
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.style.display = 'flex';
 }
-
 function hideLoading() {
-    document.getElementById('loadingOverlay').style.display = 'none';
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.style.display = 'none';
+}
+function openModal(id){ const m = document.getElementById(id); if (m) m.style.display='block'; }
+function closeModal(id){ const m = document.getElementById(id); if (m) m.style.display='none'; }
+
+function showError(msg){
+  const text = document.getElementById('errorMessage');
+  if(text) text.textContent = msg || 'حدث خطأ ما';
+  openModal('errorModal');
 }
 
-function showError(message) {
-    document.getElementById('errorMessage').textContent = message;
-    document.getElementById('errorModal').style.display = 'flex';
+function statusPillClass(status){
+  if(!status) return 'status-new';
+  if(status.includes('مكتملة')) return 'status-completed';
+  if(status.includes('قيد المعالجة')) return 'status-pending';
+  if(status.includes('مراجعة')||status.includes('معلقة')) return 'status-review';
+  if(status.includes('مفتوحة')||status.includes('جديدة')) return 'status-new';
+  return 'status-pending';
 }
 
-function hideError() {
-    document.getElementById('errorModal').style.display = 'none';
+/** ====== Load list & stats ====== */
+function applySort(items){
+  const arr = [...items];
+  if (state.sortBy === 'oldest') {
+    arr.sort((a,b)=> new Date(a.CreatedAt) - new Date(b.CreatedAt));
+  } else if (state.sortBy === 'priority') {
+    const rank = { 'عالية': 0, 'متوسطة': 1, 'منخفضة': 2 };
+    arr.sort((a,b)=> (rank[a.Priority] ?? 9) - (rank[b.Priority] ?? 9));
+  } else if (state.sortBy === 'status') {
+    arr.sort((a,b)=> String(a.Status).localeCompare(String(b.Status), 'ar'));
+  } else {
+    arr.sort((a,b)=> new Date(b.CreatedAt) - new Date(a.CreatedAt)); // newest
+  }
+  return arr;
 }
 
-function showSuccess(message) {
-    // Create a temporary success message
-    const successDiv = document.createElement('div');
-    successDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #28a745;
-        color: white;
-        padding: 1rem 2rem;
-        border-radius: 8px;
-        z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    `;
-    successDiv.textContent = message;
-    
-    document.body.appendChild(successDiv);
-    
-    setTimeout(() => {
-        successDiv.remove();
-    }, 3000);
+function renderStats(items){
+  const total = items.length;
+  const pending = items.filter(c => (c.Status||'').includes('قيد المعالجة')).length;
+  const completed = items.filter(c => (c.Status||'').includes('مكتملة')).length;
+  const urgent = items.filter(c => (c.Priority||'') === 'عالية').length;
+
+  document.getElementById('totalCount')?.innerText = total;
+  document.getElementById('pendingCount')?.innerText = pending;
+  document.getElementById('completedCount')?.innerText = completed;
+  document.getElementById('urgentCount')?.innerText = urgent;
+  document.getElementById('resultsCount')?.innerText = `${total} شكوى`;
 }
+
+function renderList(items){
+  const listEl = document.getElementById('complaintsList');
+  if(!listEl) return;
+  listEl.innerHTML = '';
+
+  if(!items.length){
+    listEl.innerHTML = `<div style="text-align:center;color:#7f8c8d;">لا توجد نتائج مطابقة</div>`;
+    return;
+  }
+
+  items.forEach(c=>{
+    const card = document.createElement('div');
+    card.className = 'complaint-card';
+    card.innerHTML = `
+      <div class="complaint-header">
+        <div>
+          <div class="complaint-title">${c.Title || 'بدون عنوان'}</div>
+          <div class="complaint-meta">
+            <span><i class="far fa-hashtag"></i> ${c.ComplaintID}</span>
+            <span><i class="far fa-building"></i> ${c.DepartmentName || '—'}</span>
+            <span><i class="far fa-user"></i> ${c.EmployeeName || '—'}</span>
+            <span><i class="far fa-calendar"></i> ${c.CreatedAt ? new Date(c.CreatedAt).toLocaleString('ar-SA') : '—'}</span>
+          </div>
+        </div>
+        <div class="complaint-status ${statusPillClass(c.Status)}">${c.Status || '—'}</div>
+      </div>
+      <div class="complaint-details">${(c.Description||'').slice(0,240)}${(c.Description||'').length>240?'…':''}</div>
+      <div class="complaint-footer">
+        <div class="complaint-meta">
+          <span><i class="far fa-tags"></i> ${c.Category || '—'}</span>
+          <span><i class="far fa-flag"></i> ${c.Priority || '—'}</span>
+          <span><i class="far fa-reply"></i> ردود: ${c.ResponseCount ?? 0}</span>
+        </div>
+        <div class="complaint-actions">
+          <button class="action-btn action-btn-primary" data-open="${c.ComplaintID}">تفاصيل</button>
+        </div>
+      </div>`;
+    listEl.appendChild(card);
+  });
+
+  listEl.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-open]');
+    if(!btn) return;
+    openComplaintDetails(btn.dataset.open);
+  }, { once: true }); // نربط مرة واحدة لتفادي التكرار
+}
+
+function renderPagination(pagination){
+  state.totalPages = pagination?.totalPages || 1;
+  const pagEl = document.getElementById('pagination');
+  if(!pagEl) return;
+  pagEl.innerHTML = '';
+
+  const addBtn = (txt, page, disabled=false, active=false)=>{
+    const b = document.createElement('button');
+    b.textContent = txt;
+    if (active) b.classList.add('active');
+    if (disabled) b.disabled = true;
+    b.addEventListener('click', ()=> { state.page = page; loadComplaints(); });
+    pagEl.appendChild(b);
+  };
+
+  addBtn('السابق', Math.max(1, state.page-1), state.page===1);
+  for(let p=1;p<=state.totalPages;p++){
+    addBtn(String(p), p, false, p===state.page);
+  }
+  addBtn('التالي', Math.min(state.totalPages, state.page+1), state.page===state.totalPages);
+}
+
+async function loadComplaints(){
+  try{
+    showLoading();
+    const params = new URLSearchParams();
+    params.set('page', state.page);
+    params.set('limit', state.limit);
+
+    // حالة من واجهة المستخدم -> حالة الكنترولر
+    const apiStatus = statusMapUItoAPI[state.filters.status] || '';
+    if (apiStatus) params.set('status', apiStatus);
+    // لا يوجد فلترة مباشرة بـ priority في الكنترولر، سنرشّح محليًا بعد الجلب
+    // category غير موجودة في الواجهة، لكن الكنترولر يدعمها إن أردت مستقبلاً. :contentReference[oaicite:10]{index=10}
+
+    const res = await fetch(`${EMP_BASE}/complaints?${params.toString()}`, { headers: authHeaders() });
+    if(!res.ok) throw new Error('فشل جلب الشكاوى');
+    const json = await res.json();
+
+    let items = json?.data?.complaints || [];
+
+    // فلترة محلية حسب الأولوية والبحث
+    if (state.filters.priority){
+      items = items.filter(c => (c.Priority||'') === state.filters.priority);
+    }
+    if (state.filters.q){
+      const q = state.filters.q.trim();
+      items = items.filter(c =>
+        String(c.Title||'').includes(q) ||
+        String(c.Description||'').includes(q) ||
+        String(c.Category||'').includes(q) ||
+        String(c.ComplaintID||'').includes(q)
+      );
+    }
+
+    items = applySort(items);
+    state.currentList = items;
+
+    renderStats(items);
+    renderList(items);
+    renderPagination(json?.data?.pagination);
+  }catch(err){
+    console.error(err);
+    showError('تعذر تحميل الشكاوى');
+  }finally{
+    hideLoading();
+  }
+}
+
+/** ====== Complaint details & actions ====== */
+function fillDetailsView(data){
+  const box = document.getElementById('complaintDetails');
+  if(!box) return;
+
+  const c = data.complaint;
+  const responses = data.responses || [];
+  box.innerHTML = `
+    <div class="complaint-detail-item">
+      <h4>العنوان</h4><p>${c.Title || '—'}</p>
+    </div>
+    <div class="complaint-detail-item">
+      <h4>الوصف</h4><p>${c.Description || '—'}</p>
+    </div>
+    <div class="complaint-detail-item">
+      <h4>البيانات</h4>
+      <p><strong>رقم الشكوى:</strong> ${c.ComplaintID} — <strong>القسم:</strong> ${c.DepartmentName || '—'}</p>
+      <p><strong>الحالة:</strong> ${c.Status || '—'} — <strong>الأولوية:</strong> ${c.Priority || '—'}</p>
+      <p><strong>صاحب الشكوى:</strong> ${c.EmployeeName || '—'} — <strong>مسندة إلى:</strong> ${c.AssignedToName || '—'}</p>
+      <p><strong>تاريخ الإنشاء:</strong> ${c.CreatedAt ? new Date(c.CreatedAt).toLocaleString('ar-SA'): '—'}</p>
+    </div>
+    <div class="complaint-responses">
+      <h4>الردود</h4>
+      ${responses.map(r=>`
+        <div class="response-item">
+          <div class="response-header">
+            <span class="response-author">${r.EmployeeName || '—'}</span>
+            <span class="response-date">${r.CreatedAt ? new Date(r.CreatedAt).toLocaleString('ar-SA'): '—'}</span>
+          </div>
+          <div>${r.Content || ''}</div>
+        </div>
+      `).join('') || '<div style="color:#7f8c8d;">لا توجد ردود بعد</div>'}
+    </div>
+  `;
+}
+
+async function openComplaintDetails(id){
+  try{
+    showLoading();
+    const res = await fetch(`${EMP_BASE}/complaints/${id}`, { headers: authHeaders() });
+    if (!res.ok) throw new Error('لا يمكن جلب تفاصيل الشكوى');
+    const json = await res.json();
+    fillDetailsView(json.data);
+    openModal('detailsModal');
+
+    // اربط أزرار التفاصيل
+    document.getElementById('respondBtn')?.addEventListener('click', ()=>{
+      document.getElementById('responseText').value = '';
+      openModal('responseModal');
+    });
+    document.getElementById('updateStatusBtn')?.addEventListener('click', ()=>{
+      openModal('statusModal');
+    });
+    document.getElementById('closeDetailsBtn')?.addEventListener('click', ()=> closeModal('detailsModal'));
+
+    // إرسال الرد
+    document.getElementById('submitResponseBtn')?.addEventListener('click', async ()=>{
+      const txt = document.getElementById('responseText').value.trim();
+      if (!txt) { alert('الرد مطلوب'); return; }
+      try{
+        const r = await fetch(`${EMP_BASE}/complaints/${id}/responses`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ content: txt })
+        });
+        if(!r.ok) throw new Error();
+        closeModal('responseModal');
+        // حدّث التفاصيل والقائمة
+        await openComplaintDetails(id);
+        await loadComplaints();
+      }catch(e){ showError('فشل إرسال الرد'); }
+    });
+    document.getElementById('cancelResponseBtn')?.addEventListener('click', ()=> closeModal('responseModal'));
+    document.getElementById('closeResponseModal')?.addEventListener('click', ()=> closeModal('responseModal'));
+
+    // تحديث الحالة
+    document.getElementById('closeStatusModal')?.addEventListener('click', ()=> closeModal('statusModal'));
+    document.getElementById('updateStatusBtn')?.addEventListener('click', ()=> openModal('statusModal'));
+    document.getElementById('newStatus')?.addEventListener('change', ()=>{}); // اختياري
+    document.getElementById('statusModal')?.querySelector('.btn.btn-primary')?.addEventListener('click', async ()=>{
+      const uiVal = (document.getElementById('newStatus')?.value)||'';
+      // خريطة عكسية نحو قيم الكنترولر المدعومة للتحديث. :contentReference[oaicite:11]{index=11}
+      const map = {
+        'جديدة':'مفتوحة/جديدة',
+        'قيد المعالجة':'قيد المعالجة',
+        'قيد المراجعة':'معلقة',
+        'تم الحل':'مكتملة',
+        'مغلقة':'مكتملة'
+      };
+      const apiStatus = map[uiVal] || uiVal || 'قيد المعالجة';
+      try{
+        const r = await fetch(`${EMP_BASE}/complaints/${id}/status`, {
+          method:'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ status: apiStatus })
+        });
+        if(!r.ok) throw new Error();
+        closeModal('statusModal');
+        await openComplaintDetails(id);
+        await loadComplaints();
+      }catch(e){ showError('تعذر تحديث الحالة'); }
+    });
+
+  }catch(err){
+    console.error(err);
+    showError('فشل فتح تفاصيل الشكوى');
+  }finally{
+    hideLoading();
+  }
+}
+
+/** ====== UI Wiring ====== */
+function wireUI(){
+  document.getElementById('sortBy')?.addEventListener('change', (e)=>{
+    state.sortBy = e.target.value;
+    renderList(applySort(state.currentList));
+  });
+
+  document.getElementById('statusFilter')?.addEventListener('change', (e)=>{
+    state.filters.status = e.target.value || '';
+    state.page = 1;
+    loadComplaints();
+  });
+
+  document.getElementById('priorityFilter')?.addEventListener('change', (e)=>{
+    state.filters.priority = e.target.value || '';
+    state.page = 1;
+    loadComplaints();
+  });
+
+  document.getElementById('searchInput')?.addEventListener('input', (e)=>{
+    state.filters.q = e.target.value || '';
+    state.page = 1;
+    // فلترة فورية على النتائج الحالية
+    const filtered = applySort(
+      (state.currentList||[]).filter(c =>
+        String(c.Title||'').includes(state.filters.q) ||
+        String(c.Description||'').includes(state.filters.q) ||
+        String(c.Category||'').includes(state.filters.q) ||
+        String(c.ComplaintID||'').includes(state.filters.q)
+      )
+    );
+    renderStats(filtered);
+    renderList(filtered);
+  });
+
+  document.getElementById('clearFilters')?.addEventListener('click', ()=>{
+    state.filters = { status:'', priority:'', q:'' };
+    document.getElementById('statusFilter').value = '';
+    document.getElementById('priorityFilter').value = '';
+    document.getElementById('searchInput').value = '';
+    state.page = 1;
+    loadComplaints();
+  });
+
+  document.getElementById('newComplaintBtn')?.addEventListener('click', ()=>{
+    // نفس مسار زر "تقديم شكوى" في الهوم. :contentReference[oaicite:12]{index=12}
+    window.location.href = '../New complaint/Newcomplaint.html';
+  });
+
+  // روابط الهيدر
+  document.getElementById('logoutBtn')?.addEventListener('click', ()=>{
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '../login/login.html';
+  });
+
+  document.getElementById('closeErrorModal')?.addEventListener('click', ()=> closeModal('errorModal'));
+  document.getElementById('closeErrorBtn')?.addEventListener('click', ()=> closeModal('errorModal'));
+  document.getElementById('closeDetailsModal')?.addEventListener('click', ()=> closeModal('detailsModal'));
+}
+
+/** ====== Notifications badge in header ====== */
+async function loadNotifBadge(){
+  try{
+    const res = await fetch(`${EMP_BASE}/notifications?page=1&limit=1`, { headers: authHeaders() });
+    if(!res.ok) return;
+    const json = await res.json();
+    const badge = document.getElementById('notificationBadge');
+    if (badge){
+      const unread = json?.data?.unreadCount ?? 0;
+      badge.textContent = unread;
+      badge.style.display = unread>0 ? 'flex' : 'none';
+    }
+  }catch(e){}
+}
+
+/** ====== Boot ====== */
+document.addEventListener('DOMContentLoaded', async ()=>{
+  if(!guardEmployee()) return;
+
+  wireUI();
+  await loadComplaints();
+  await loadNotifBadge();
+
+  // افتح شكوى مباشرة إذا جاء query param ?open=ID
+  const url = new URL(window.location.href);
+  const openId = url.searchParams.get('open');
+  if (openId) openComplaintDetails(openId);
+});

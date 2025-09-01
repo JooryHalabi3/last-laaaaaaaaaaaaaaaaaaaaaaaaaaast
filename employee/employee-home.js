@@ -1,755 +1,208 @@
-// Global variables
-let currentUser = null;
-let assignedComplaints = [];
-let notifications = [];
-let currentLang = localStorage.getItem('lang') || 'ar';
+/** ====== Config & Helpers ====== */
+const API_BASE_URL = 'http://localhost:3001/api';
+const EMP_BASE = `${API_BASE_URL}/employee`;
 
-// ...existing code...
-
-// حساب الوقت المتبقي + SLA
-function calculateTimeRemaining(deadline) {
-    if (!deadline) return null;
-    const now = new Date();
-    const deadlineDate = new Date(deadline);
-    const timeRemaining = deadlineDate.getTime() - now.getTime();
-    if (timeRemaining <= 0) return { expired: true, text: 'انتهت المهلة', days: 0, hours: 0, minutes: 0 };
-    const days = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((timeRemaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
-    let text = days > 0 ? `${days} يوم` : hours > 0 ? `${hours} ساعة` : `${minutes} دقيقة`;
-    return { expired: false, text: `باقي ${text}`, days, hours, minutes };
-}
-
-function getSLAStatus(deadline) {
-    if (!deadline) return 'غير محدد';
-    const t = calculateTimeRemaining(deadline);
-    if (!t) return 'غير محدد';
-    if (t.expired) return 'متأخرة';
-    if (t.days === 0 && t.hours < 24) return 'قريب الانتهاء';
-    return 'ضمن المهلة';
-}
-
-// التنقل إلى تفاصيل الشكوى
-function goToComplaintDetails(id) {
-    try {
-        console.log('جاري الانتقال إلى تفاصيل الشكوى رقم:', id);
-        const url = new URL('../general complaints/details.html', window.location.origin);
-        url.searchParams.set('id', id);
-        url.searchParams.set('t', Date.now());
-        console.log('الانتقال إلى:', url.toString());
-        window.location.assign(url.toString());
-    } catch (err) {
-        console.error('خطأ في الانتقال إلى التفاصيل:', err);
-        alert('خطأ في الانتقال إلى التفاصيل: ' + err.message);
-    }
-}
-
-// Initialize the page
-document.addEventListener('DOMContentLoaded', function() {
-    initializePage();
-});
-
-async function initializePage() {
-    try {
-        showLoading();
-        
-        // Check authentication
-        await checkAuthentication();
-        
-        // Load user data
-        await loadUserData();
-        
-        // Load assigned complaints statistics
-        await loadAssignedComplaintsStats();
-        
-        // Load recent assigned complaints
-        await loadRecentAssignedComplaints();
-        
-        // Load notifications
-        await loadNotifications();
-        
-        // Setup event listeners
-        setupEventListeners();
-        
-        hideLoading();
-    } catch (error) {
-        console.error('Error initializing page:', error);
-        showError('حدث خطأ أثناء تحميل الصفحة');
-        hideLoading();
-    }
-}
-
-// ...existing code...
-
-function loadUserData() {
-    // بيانات ثابتة للواجهة فقط
-    const mockUserData = {
-        FullName: 'أحمد محمد علي',
-        Username: 'ahmed.ali',
-        Department: 'قسم الشكاوى',
-        Position: 'موظف معالجة شكاوى'
-    };
-    updateUserDisplay(mockUserData);
-}
-
-function updateUserDisplay(userData) {
-    const userNameElement = document.getElementById('userName');
-    const userAvatarElement = document.getElementById('userAvatar');
-    
-    if (userNameElement) {
-        userNameElement.textContent = userData.FullName || userData.Username || 'موظف';
-    }
-    if (userAvatarElement) {
-        userAvatarElement.src = '../icon/person.png';
-    }
-}
-
-function loadAssignedComplaintsStats() {
-    // بيانات ثابتة للواجهة فقط
-    const mockStats = {
-        total: 3,
-        pending: 2,
-        completed: 1,
-        urgent: 1
-    };
-    updateStatisticsDisplay(mockStats);
-}
-
-function updateStatisticsDisplay(stats) {
-    const elements = {
-        'assignedComplaintsCount': stats.total || 0,
-        'totalAssigned': stats.total || 0,
-        'pendingAssigned': stats.pending || 0,
-        'completedAssigned': stats.completed || 0,
-        'urgentAssigned': stats.urgent || 0
-    };
-    
-    Object.keys(elements).forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.textContent = elements[id];
-        }
-    });
-}
-
-function loadRecentAssignedComplaints() {
-    // بيانات ثابتة للواجهة فقط
-    const mockComplaints = [
-        {
-            ComplaintID: 123,
-            ComplaintDetails: 'شكوى حول سوء الخدمة في قسم الطوارئ - المريض ينتظر أكثر من ساعتين دون معالجة',
-            CurrentStatus: 'جديدة',
-            AssignedAt: new Date().toISOString(),
-            Priority: 'عالية',
-            DepartmentName: 'قسم الطوارئ',
-            ComplaintTypeName: 'شكوى خدمة'
-        },
-        {
-            ComplaintID: 124,
-            ComplaintDetails: 'شكوى حول نظافة الغرفة - الغرفة غير نظيفة والمرضى يشكون من ذلك',
-            CurrentStatus: 'قيد المعالجة',
-            AssignedAt: new Date(Date.now() - 86400000).toISOString(),
-            Priority: 'متوسطة',
-            DepartmentName: 'قسم التنظيف',
-            ComplaintTypeName: 'شكوى نظافة'
-        }
-    ];
-    assignedComplaints = mockComplaints;
-    displayRecentComplaints(mockComplaints);
-}
-
-function displayRecentComplaints(complaints) {
-    const container = document.getElementById('recentComplaintsList');
-    if (!container) {
-        console.error('Container element not found');
-        return;
-    }
-    
-    if (complaints.length === 0) {
-        container.innerHTML = `
-            <div class="complaint-item">
-                <div class="complaint-info">
-                    <h4>لا توجد شكاوى مسندة إليك حالياً</h4>
-                    <p>ستظهر هنا الشكاوى التي يتم إسنادها إليك من قبل الإدارة</p>
-                </div>
-            </div>
-        `;
-        return;
-    }
-    
-    const complaintsHTML = complaints.slice(0, 5).map(complaint => `
-        <div class="complaint-item" onclick="viewComplaintDetails(${complaint.ComplaintID})">
-            <div class="complaint-info">
-                <h4>شكوى رقم ${complaint.ComplaintID}</h4>
-                <p>${complaint.ComplaintDetails.substring(0, 100)}${complaint.ComplaintDetails.length > 100 ? '...' : ''}</p>
-                <small>تاريخ الإسناد: ${formatDate(complaint.AssignedAt)}</small>
-            </div>
-            <div class="complaint-status status-${getStatusClass(complaint.CurrentStatus)}">
-                ${complaint.CurrentStatus}
-            </div>
-        </div>
-    `).join('');
-    
-    container.innerHTML = complaintsHTML;
-}
-
-function getStatusClass(status) {
-    switch (status) {
-        case 'جديدة':
-            return 'new';
-        case 'قيد المعالجة':
-            return 'pending';
-        case 'مكتملة':
-        case 'تم الحل':
-            return 'completed';
-        case 'عاجلة':
-            return 'urgent';
-        default:
-            return 'pending';
-    }
-}
-
-function loadNotifications() {
-    // بيانات ثابتة للواجهة فقط
-    notifications = [
-        {
-            ID: 1,
-            Title: 'شكوى جديدة مسندة إليك',
-            Body: 'تم إسناد شكوى جديدة برقم #123 إليك للمعالجة',
-            IsRead: false,
-            CreatedAt: new Date().toISOString()
-        }
-    ];
-    updateNotificationBadge();
-}
-
-function updateNotificationBadge() {
-    const unreadCount = notifications.filter(n => !n.IsRead).length;
-    const badgeElement = document.getElementById('notificationBadge');
-    if (badgeElement) {
-        badgeElement.textContent = unreadCount;
-        badgeElement.style.display = unreadCount > 0 ? 'flex' : 'none';
-    }
-}
-
-function setupEventListeners() {
-    // Profile link
-    const profileLink = document.getElementById('profileLink');
-    if (profileLink) {
-        profileLink.addEventListener('click', function(e) {
-            e.preventDefault();
-            window.location.href = '../login/profile.html';
-        });
-    }
-    
-    // Logout button
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            logout();
-        });
-    }
-    
-    // Notification icon
-    const notificationIcon = document.getElementById('notificationIcon');
-    if (notificationIcon) {
-        notificationIcon.addEventListener('click', function() {
-            showNotifications();
-        });
-    }
-    
-    // Error modal close buttons
-    const closeErrorModal = document.getElementById('closeErrorModal');
-    if (closeErrorModal) {
-        closeErrorModal.addEventListener('click', function() {
-            hideError();
-        });
-    }
-    
-    const closeErrorBtn = document.getElementById('closeErrorBtn');
-    if (closeErrorBtn) {
-        closeErrorBtn.addEventListener('click', function() {
-            hideError();
-        });
-    }
-    
-    // Modal backdrop click
-    const errorModal = document.getElementById('errorModal');
-    if (errorModal) {
-        errorModal.addEventListener('click', function(e) {
-            if (e.target === this) {
-                hideError();
-            }
-        });
-    }
-}
-
-function viewComplaintDetails(complaintId) {
-    window.location.href = `employee-complaints.html?complaint=${complaintId}`;
-}
-
-function showNotifications() {
-    if (notifications.length === 0) {
-        showError('لا توجد تنبيهات جديدة');
-        return;
-    }
-    
-    // Create notifications modal
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.id = 'notificationsModal';
-    modal.innerHTML = `
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>التنبيهات</h3>
-                <button class="close-modal" onclick="closeNotifications()">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div id="notificationsList">
-                    ${notifications.map(notification => `
-                        <div class="notification-item ${notification.IsRead ? 'read' : 'unread'}">
-                            <h4>${notification.Title}</h4>
-                            <p>${notification.Body}</p>
-                            <small>${formatDate(notification.CreatedAt)}</small>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-primary" onclick="markAllAsRead()">تحديد الكل كمقروء</button>
-                <button class="btn btn-secondary" onclick="closeNotifications()">إغلاق</button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    modal.style.display = 'flex';
-}
-
-function closeNotifications() {
-    const modal = document.getElementById('notificationsModal');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-async function markAllAsRead() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/employee/notifications/mark-read`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${currentUser.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (response.ok) {
-            // Update local notifications
-            notifications.forEach(n => n.IsRead = true);
-            const badgeElement = document.getElementById('notificationBadge');
-            if (badgeElement) {
-                badgeElement.style.display = 'none';
-            }
-            closeNotifications();
-        }
-    } catch (error) {
-        console.error('Error marking notifications as read:', error);
-    }
-}
-
-function logout() {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    window.location.href = '../login/login.html';
-}
-
-function formatDate(dateString) {
-    if (!dateString) return '';
-    
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ar-SA', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
 }
 
 function showLoading() {
-    const loadingOverlay = document.getElementById('loadingOverlay');
-    if (loadingOverlay) {
-        loadingOverlay.style.display = 'flex';
-    }
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.style.display = 'flex';
 }
-
 function hideLoading() {
-    const loadingOverlay = document.getElementById('loadingOverlay');
-    if (loadingOverlay) {
-        loadingOverlay.style.display = 'none';
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.style.display = 'none';
+}
+
+function showError(msg) {
+  const modal = document.getElementById('errorModal');
+  const text = document.getElementById('errorMessage');
+  if (text) text.textContent = msg || 'حدث خطأ ما';
+  if (modal) modal.style.display = 'block';
+}
+
+function applyLanguage(lang){
+  // صفحة الهوم تحتوي عناصر data-ar/data-en في العنوان
+  const root = document.body;
+  root.classList.remove('lang-ar','lang-en');
+  root.classList.add(lang === 'ar' ? 'lang-ar' : 'lang-en');
+
+  document.querySelectorAll('[data-ar]').forEach(el=>{
+    const t = el.getAttribute(`data-${lang}`);
+    if (t) el.textContent = t;
+  });
+  const langText = document.getElementById('langText');
+  if (langText) langText.textContent = lang === 'ar' ? 'العربية | English' : 'English | العربية';
+  localStorage.setItem('lang', lang);
+}
+
+function guardEmployee(){
+  const userRaw = localStorage.getItem('user');
+  const token = localStorage.getItem('token');
+  if (!token || !userRaw) {
+    window.location.href = '../login/login.html';
+    return false;
+  }
+  const user = JSON.parse(userRaw);
+  // RoleID: 1 SuperAdmin, 2 Employee, 3 Admin
+  if (Number(user.RoleID) !== 2 && user.Username?.toLowerCase() !== 'employee'){
+    // إن لم يكن موظفًا أعده للهوم العامة أو صفحة صلاحياته
+    window.location.href = '../login/home.html';
+    return false;
+  }
+  return true;
+}
+
+/** ====== Notifications ====== */
+async function loadNotifications(){
+  try{
+    const res = await fetch(`${EMP_BASE}/notifications?page=1&limit=10`, { headers: authHeaders() });
+    if(!res.ok) throw new Error('فشل جلب الإشعارات');
+    const json = await res.json();
+    const list = document.getElementById('notifList');
+    const countEl = document.getElementById('notifCount');
+    if (countEl){
+      const unread = json?.data?.unreadCount ?? 0;
+      countEl.textContent = unread;
+      countEl.style.display = unread > 0 ? 'inline-block' : 'none';
     }
-}
+    if (list){
+      list.innerHTML = '';
+      (json?.data?.notifications || []).forEach(n=>{
+        const row = document.createElement('div');
+        row.className = 'notif-item';
+        row.innerHTML = `
+          <div class="meta">${new Date(n.CreatedAt).toLocaleString('ar-SA')}</div>
+          <div><strong>${n.Title || 'إشعار'}</strong> — ${n.Message || ''}</div>
+          <div class="notif-actions">
+            <button class="notif-detail-btn" data-id="${n.ComplaintID || ''}">تفاصيل</button>
+            ${n.IsRead ? '' : '<button class="notif-remove-btn" title="وضع كمقروء" data-read="'+(n.NotificationID)+'">✓</button>'}
+          </div>`;
+        list.appendChild(row);
+      });
 
-function showError(message) {
-    const errorMessage = document.getElementById('errorMessage');
-    const errorModal = document.getElementById('errorModal');
-    
-    if (errorMessage) {
-        errorMessage.textContent = message;
-    }
-    if (errorModal) {
-        errorModal.style.display = 'flex';
-    }
-}
-
-function hideError() {
-    const errorModal = document.getElementById('errorModal');
-    if (errorModal) {
-        errorModal.style.display = 'none';
-    }
-}
-
-// Add CSS for notifications
-const notificationStyles = `
-<style>
-.notification-item {
-    padding: 1rem;
-    border-bottom: 1px solid #e1e8ed;
-    transition: background-color 0.3s ease;
-}
-
-.notification-item:last-child {
-    border-bottom: none;
-}
-
-.notification-item.unread {
-    background-color: #f8f9fa;
-    border-left: 4px solid #667eea;
-}
-
-.notification-item.read {
-    background-color: white;
-}
-
-.notification-item h4 {
-    color: #2c3e50;
-    margin-bottom: 0.5rem;
-    font-size: 1rem;
-}
-
-.notification-item p {
-    color: #7f8c8d;
-    margin-bottom: 0.5rem;
-    font-size: 0.9rem;
-}
-
-.notification-item small {
-    color: #95a5a6;
-    font-size: 0.8rem;
-}
-
-#notificationsList {
-    max-height: 400px;
-    overflow-y: auto;
-}
-</style>
-`;
-
-document.head.insertAdjacentHTML('beforeend', notificationStyles);
-
-// ==============================
-// وظائف إضافية من home.js
-// ==============================
-
-// KPIs
-async function loadKPIs() {
-    try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        const roleID = user.RoleID || 2;
-        const departmentID = user.DepartmentID;
-
-        let endpoint = '/complaints/all';
-        if (roleID === 3 && departmentID) {
-            endpoint = `/complaints/department/${departmentID}`;
-        }
-
-        const response = await fetchFromAPI(endpoint);
-        const complaints = response.data || [];
-
-        const total = complaints.length;
-        const open = complaints.filter(c => c.CurrentStatus === 'جديدة' || c.CurrentStatus === 'قيد المعالجة').length;
-        const responded = complaints.filter(c => c.CurrentStatus === 'تم الرد' || c.CurrentStatus === 'مغلقة').length;
-        const respondedPercentage = total > 0 ? Math.round((responded / total) * 100) : 0;
-
-        let dueSoon = 0, late = 0;
-        complaints.forEach(c => {
-            if (c.ResponseDeadline) {
-                const t = calculateTimeRemaining(c.ResponseDeadline);
-                if (t?.expired) late++;
-                else if (t && t.days === 0 && t.hours < 24) dueSoon++;
-            }
-        });
-
-        document.getElementById('kpiTotal').textContent = total;
-        document.getElementById('kpiOpen').textContent = open;
-        document.getElementById('kpiResponded').textContent = `${respondedPercentage}%`;
-        document.getElementById('kpiDueSoon').textContent = dueSoon;
-        document.getElementById('kpiLate').textContent = late;
-    } catch (error) {
-        console.error('خطأ في تحميل KPIs:', error);
-        document.getElementById('kpiTotal').textContent = '—';
-        document.getElementById('kpiOpen').textContent = '—';
-        document.getElementById('kpiResponded').textContent = '—';
-        document.getElementById('kpiDueSoon').textContent = '—';
-        document.getElementById('kpiLate').textContent = '—';
-    }
-}
-
-// جدول الشكاوى
-async function loadComplaintsTable() {
-    try {
-        const tbody = document.getElementById('compBody');
-        if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#666;">جاري التحميل...</td></tr>';
-
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        const roleID = user.RoleID || 2;
-        const departmentID = user.DepartmentID;
-
-        let endpoint = '/complaints/all';
-        if (roleID === 3 && departmentID) {
-            endpoint = `/complaints/department/${departmentID}`;
-        }
-
-        const response = await fetchFromAPI(endpoint);
-        const complaints = response.data || [];
-        
-        if (complaints.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#666;">لا توجد شكاوى</td></tr>';
-            return;
-        }
-
-        const rows = complaints.map(c => {
-            const t = calculateTimeRemaining(c.ResponseDeadline);
-            const createdDate = c.ComplaintDate ? new Date(c.ComplaintDate).toLocaleDateString('ar-SA') : '—';
-            const deadlineDate = c.ResponseDeadline ? new Date(c.ResponseDeadline).toLocaleDateString('ar-SA') : '—';
-            const timeRemainingText = t ? t.text : '—';
-
-            let statusBadge = '';
-            if (c.CurrentStatus === 'جديدة') statusBadge = '<span class="badge badge-open">جديدة</span>';
-            else if (c.CurrentStatus === 'قيد المعالجة') statusBadge = '<span class="badge badge-progress">قيد المعالجة</span>';
-            else if (c.CurrentStatus === 'تم الرد') statusBadge = '<span class="badge badge-responded">تم الرد</span>';
-            else if (c.CurrentStatus === 'مغلقة') statusBadge = '<span class="badge badge-closed">مغلقة</span>';
-            else statusBadge = `<span class="badge badge-neutral">${c.CurrentStatus || '—'}</span>`;
-
-            return `
-                <tr data-id="${c.ComplaintID}">
-                    <td>#${c.ComplaintID}</td>
-                    <td>${c.DepartmentName || `قسم رقم ${c.DepartmentID || 'غير محدد'}`}</td>
-                    <td>${statusBadge}</td>
-                    <td>${c.ComplaintTypeName || '—'}</td>
-                    <td>${createdDate}</td>
-                    <td>${deadlineDate}</td>
-                    <td>${timeRemainingText}</td>
-                </tr>
-            `;
-        });
-
-        tbody.innerHTML = rows.join('');
-    } catch (error) {
-        console.error('خطأ في تحميل جدول الشكاوى:', error);
-        const tbody = document.getElementById('compBody');
-        if (tbody) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#b22121;">تعذر جلب البيانات</td></tr>';
-        }
-    }
-}
-
-// تحميل إشعارات جديدة
-async function loadNewNotifications() {
-    try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        const roleID = user.RoleID || 2;
-        const departmentID = user.DepartmentID;
-
-        let endpoint = '/complaints/all?dateFilter=7';
-        if (roleID === 3 && departmentID) {
-            endpoint = `/complaints/department/${departmentID}?dateFilter=7`;
-        }
-
-        const res = await fetchFromAPI(endpoint);
-        const complaints = (res && res.data) || [];
-
-        const badge = document.getElementById('notifCount');
-        if (badge) {
-            badge.textContent = complaints.length;
-            badge.style.display = complaints.length > 0 ? 'inline-block' : 'none';
-        }
-
-        const list = document.getElementById('notifList');
-        if (!list) return;
-
-        if (complaints.length === 0) {
-            list.innerHTML = '<div class="notif-item">لا توجد شكاوى جديدة</div>';
-            return;
-        }
-
-        list.innerHTML = complaints.slice(0, 20).map(c => `
-            <div class="notif-item" data-id="${c.ComplaintID}">
-                <div class="notif-main">
-                    <div class="notif-title">شكوى جديدة #${c.ComplaintID}</div>
-                    <div class="notif-body">
-                        ${c.DepartmentName || 'قسم غير محدد'} •
-                        ${c.ComplaintTypeName || 'نوع غير محدد'} •
-                        ${c.ComplaintDate ? new Date(c.ComplaintDate).toLocaleString('ar-SA') : '—'}
-                    </div>
-                </div>
-                <div class="notif-actions">
-                    <button class="btn-details" data-action="details" title="عرض التفاصيل">التفصيل</button>
-                    <button class="btn-dismiss" data-action="dismiss" title="إخفاء" aria-label="إخفاء">×</button>
-                </div>
-            </div>
-        `).join('');
-
-        list.querySelectorAll('.notif-item').forEach(row => {
-            const id = row.getAttribute('data-id');
-
-            row.addEventListener('click', (e) => {
-                const btn = e.target.closest('button[data-action]');
-                if (!btn) return;
-
-                const action = btn.getAttribute('data-action');
-
-                if (action === 'details') {
-                    goToComplaintDetails(id);
-                }
-
-                if (action === 'dismiss') {
-                    row.remove();
-                    if (badge) {
-                        const current = parseInt(badge.textContent || '0', 10) || 0;
-                        const next = Math.max(current - 1, 0);
-                        badge.textContent = next;
-                        badge.style.display = next > 0 ? 'inline-block' : 'none';
-                    }
-                    if (!list.querySelector('.notif-item')) {
-                        list.innerHTML = '<div class="notif-item">لا توجد شكاوى جديدة</div>';
-                    }
-                }
+      list.addEventListener('click', async (e)=>{
+        const btn = e.target.closest('button');
+        if(!btn) return;
+        if (btn.classList.contains('notif-detail-btn') && btn.dataset.id){
+          window.location.href = `employee-complaints.html?open=${btn.dataset.id}`;
+        } else if (btn.classList.contains('notif-remove-btn') && btn.dataset.read){
+          try{
+            await fetch(`${EMP_BASE}/notifications/${btn.dataset.read}/read`, {
+              method: 'PUT',
+              headers: authHeaders(),
+              body: JSON.stringify({ isRead: 1 })
             });
-        });
-
-    } catch (err) {
-        console.error('خطأ في تحميل الشكاوى الجديدة:', err);
-        const list = document.getElementById('notifList');
-        if (list) list.innerHTML = '<div class="notif-item" style="color:#b22121;">تعذر جلب الشكاوى الجديدة</div>';
+            await loadNotifications(); // refresh
+          }catch(e){}
+        }
+      });
     }
+  }catch(err){
+    console.error(err);
+  }
 }
 
-// إعداد اللغة
-function applyLanguage(lang) {
-    currentLang = lang;
-    localStorage.setItem('lang', lang);
+/** ====== KPIs & Table ====== */
+function computeKpis(complaints){
+  const total = complaints.length;
+  const byStatus = s => complaints.filter(c => (c.Status||'').includes(s)).length;
+  const highPriority = complaints.filter(c => (c.Priority||'') === 'عالية').length;
 
-    document.documentElement.lang = lang;
-    document.body.dir = lang === 'ar' ? 'rtl' : 'ltr';
-    document.body.style.textAlign = lang === 'ar' ? 'right' : 'left';
-
-    document.querySelectorAll('[data-ar]').forEach(el => {
-        el.textContent = el.getAttribute(`data-${lang}`);
-    });
-    document.querySelectorAll('[data-ar-placeholder]').forEach(el => {
-        el.placeholder = el.getAttribute(`data-${lang}-placeholder`);
-    });
-
-    const langText = document.getElementById('langText');
-    if (langText) langText.textContent = lang === 'ar' ? 'العربية | English' : 'English | العربية';
-
-    document.body.style.fontFamily = lang === 'ar' ? "'Tajawal', sans-serif" : "serif";
+  // مواعيد وديدلاين غير موجودة في الـ schema المرسل، نعرض شرطة فقط
+  document.getElementById('kpiTotal')?.innerText = total;
+  document.getElementById('kpiOpen')?.innerText = byStatus('مفتوحة') + byStatus('جديدة');
+  document.getElementById('kpiResponded')?.innerText = byStatus('قيد المعالجة');
+  document.getElementById('kpiDueSoon')?.innerText = byStatus('مكتملة');
+  document.getElementById('kpiLate')?.innerText = highPriority;
 }
 
-// تحديث initializePage لتشمل الوظائف الجديدة
-async function initializePageUpdated() {
-    try {
-        showLoading();
-        
-        // تطبيق اللغة
-        applyLanguage(currentLang);
-        
-        // Check authentication
-        await checkAuthentication();
-        
-        // Load user data
-        await loadUserData();
-        
-        // Load assigned complaints statistics
-        await loadAssignedComplaintsStats();
-        
-        // تحميل البيانات الجديدة
-        await loadKPIs();
-        await loadComplaintsTable();
-        
-        // Load recent assigned complaints
-        await loadRecentAssignedComplaints();
-        
-        // Load notifications
-        await loadNotifications();
-        await loadNewNotifications();
-        
-        // Setup event listeners
-        setupEventListeners();
-        setupNewEventListeners();
-        
-        hideLoading();
-    } catch (error) {
-        console.error('Error initializing page:', error);
-        showError('حدث خطأ أثناء تحميل الصفحة');
-        hideLoading();
-    }
+function statusBadgeClass(status){
+  if(!status) return 'status-new';
+  if(status.includes('مكتملة')) return 'status-completed';
+  if(status.includes('قيد المعالجة')) return 'status-pending';
+  if(status.includes('مفتوحة')||status.includes('جديدة')) return 'status-new';
+  return 'status-pending';
 }
 
-// إعداد مستمعات الأحداث الجديدة
-function setupNewEventListeners() {
-    // زر اللغة
-    const toggleBtn = document.getElementById('langToggle');
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', () => {
-            const newLang = currentLang === 'ar' ? 'en' : 'ar';
-            applyLanguage(newLang);
-        });
-    }
-
-    // زر الإشعارات
-    const notifBtn = document.getElementById('notifBtn');
-    const notifModal = document.getElementById('notifModal');
-    const closeNotif = document.getElementById('closeNotif');
-
-    notifBtn?.addEventListener('click', async () => {
-        await loadNewNotifications();
-        if (notifModal) notifModal.style.display = 'flex';
+function fillTable(complaints){
+  const tbody = document.getElementById('compBody');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+  if(!complaints.length){
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#666;">—</td></tr>`;
+    return;
+  }
+  complaints.slice(0,10).forEach(c=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${c.ComplaintID}</td>
+      <td>${c.DepartmentName || '—'}</td>
+      <td><span class="complaint-status ${statusBadgeClass(c.Status)}">${c.Status || '—'}</span></td>
+      <td>${c.Category || '—'}</td>
+      <td>${c.CreatedAt ? new Date(c.CreatedAt).toLocaleDateString('ar-SA') : '—'}</td>
+      <td>—</td>
+      <td>—</td>`;
+    tr.style.cursor='pointer';
+    tr.addEventListener('click', ()=> {
+      window.location.href = `employee-complaints.html?open=${c.ComplaintID}`;
     });
-
-    closeNotif?.addEventListener('click', () => {
-        if (notifModal) notifModal.style.display = 'none';
-    });
-
-    notifModal?.addEventListener('click', (e) => {
-        if (e.target === notifModal) notifModal.style.display = 'none';
-    });
+    tbody.appendChild(tr);
+  });
 }
 
-// استبدال استدعاء initializePage الأصلي
-document.addEventListener('DOMContentLoaded', function() {
-    initializePageUpdated();
-    
-    // تحديث دوري كل 5 دقائق
-    setInterval(() => {
-        loadKPIs();
-        loadComplaintsTable();
-        loadNewNotifications();
-        loadAssignedComplaintsStats();
-    }, 5 * 60 * 1000);
+async function loadOverviewData(){
+  try{
+    showLoading();
+    // نستخدم اندبوينت شكاوى الموظف ونجمّع إحصائيات محلياً
+    const res = await fetch(`${EMP_BASE}/complaints?page=1&limit=200`, { headers: authHeaders() });
+    if(!res.ok) throw new Error('HTTP error');
+    const json = await res.json();
+    const complaints = json?.data?.complaints || [];
+    computeKpis(complaints);
+    fillTable(complaints);
+  }catch(err){
+    console.error(err);
+    showError('فشل في معالجة البيانات من الخادم');
+  }finally{
+    hideLoading();
+  }
+}
+
+/** ====== Boot ====== */
+document.addEventListener('DOMContentLoaded', async ()=>{
+  if(!guardEmployee()) return;
+
+  const lang = localStorage.getItem('lang') || 'ar';
+  applyLanguage(lang);
+
+  document.getElementById('langToggle')?.addEventListener('click', ()=>{
+    applyLanguage((localStorage.getItem('lang')||'ar') === 'ar' ? 'en' : 'ar');
+  });
+
+  // إشعارات
+  document.getElementById('notifBtn')?.addEventListener('click', ()=>{
+    const m = document.getElementById('notifModal');
+    if (m) m.style.display = 'flex';
+  });
+  document.getElementById('closeNotif')?.addEventListener('click', ()=>{
+    const m = document.getElementById('notifModal');
+    if (m) m.style.display = 'none';
+  });
+
+  // إغلاق خطأ
+  document.getElementById('closeErrorModal')?.addEventListener('click', ()=> {
+    const m = document.getElementById('errorModal'); if(m) m.style.display='none';
+  });
+  document.getElementById('closeErrorBtn')?.addEventListener('click', ()=> {
+    const m = document.getElementById('errorModal'); if(m) m.style.display='none';
+  });
+
+  await loadOverviewData();
+  await loadNotifications();
 });
