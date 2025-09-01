@@ -1,117 +1,74 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title data-ar="لوحة تحكم المسؤول — سوبر أدمن" data-en="Admin Control Panel — Super Admin">لوحة تحكم المسؤول — سوبر أدمن</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>الصفحة الرئيسية - الشكاوى</title>
+ <!-- خط عربي: Tajawal -->
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
 
-  <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
+<!-- خط إنجليزي: Merriweather (serif) -->
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
 
-  <!-- Page CSS (لا تعدّل هنا) -->
   <link rel="stylesheet" href="superadmin.css">
 </head>
 
-<body>
-  <!-- زر العودة العام -->
-  <div class="back-button">
-    <a href="#" onclick="goBack()">
-      <img src="/icon/Back.png" alt="Back Icon" class="back-icon" />
-      <span data-ar="عودة" data-en="Back">عودة</span>
-    </a>
-  </div>
+<body>  
+    <div class="back-button">
+      <a href="#" onclick="goBack()">
+        <img src="/icon/Back.png" alt="Back Icon" class="back-icon" />
+        <span data-ar="عودة" data-en="Back">عودة</span>
+      </a>
+    </div>
 
-  <!-- شريط الانتحال (Switch User) يظهر فقط عند تفعيل الانتحال -->
-  <div id="impersonation-banner" style="display:none; position:fixed; top:10px; left:10px; z-index:9999;">
-    <button id="end-impersonation-btn"
-            style="padding:8px 12px; border:none; border-radius:6px; background:#dc2626; color:#fff; cursor:pointer;">
-      🔙 الرجوع لحساب السوبر
-    </button>
-    <span style="margin-inline-start:8px" data-ar="أنت الآن تدير الحساب بالنيابة عن: " data-en="You are impersonating: ">
-      أنت الآن تدير الحساب بالنيابة عن:
-    </span>
-    <strong id="impersonated-user-name">—</strong>
-  </div>
-
-  <!-- الرأس -->
   <header class="header">
     <div class="header-content">
-      <div class="header-title" data-ar="عُــــــونَك — لوحة تحكم المسؤول" data-en="AOUNAK — Admin Control Panel">عُــــــونَك — لوحة تحكم المسؤول</div>
+      <div class="header-title" data-ar="عُــــــونَك" data-en="AOUNAK">عُــــــونَك</div>
       <img src="/icon/hospital-logo.png" alt="شعار المستشفى" class="header-logo">
-      <button id="langToggle" class="lang-toggle-btn">
-        <img src="/icon/lang.png" alt="language" class="lang-icon" />
-        <span id="langText">العربية | English</span>
-      </button>
+<button id="langToggle" class="lang-toggle-btn">
+  <img src="/icon/lang.png" alt="language" class="lang-icon" />
+  <span id="langText">العربية | English</span>
+</button>
+
+
+
+
     </div>
   </header>
-
-  <!-- المحتوى -->
+ <br> <br><br> <br> <br><br>
   <main>
     <section class="dashboard">
-      <!-- السجلات -->
       <div class="card">
-        <img src="/icon/list.png" alt="Logs icon">
-        <h3 data-ar="السجلات" data-en="Logs">السجلات</h3>
-        <p data-ar="الاطلاع على كل عمليات النظام (إدخال/تعديل/تصدير/توزيع...)" data-en="View all system operations (create/update/export/assignment...)">
-          الاطلاع على كل عمليات النظام (إدخال/تعديل/تصدير/توزيع...)
-        </p>
-        <a href="/superadmin/logs.html" class="btn" data-ar="عرض السجلات" data-en="View Logs">عرض السجلات</a>
+        <img src="/icon/list.png" alt="السجلات">
+        <h3 data-ar="السجلات  " data-en="Logs">السجلات</h3>
+        <p data-ar="الاطلاع على سجلات العمليات والشكاوى" data-en="View operation and complaint logs">قم بتسجيل شكوى طبية جديدة</p>
+        <a href="/superadmin/logs.html" class="btn" data-ar="عرض السجلات " data-en="View Logs"> عرض السجلات</a>
       </div>
 
-      <!-- الصلاحيات -->
       <div class="card">
-        <img src="/icon/group.png" alt="Permissions icon">
-        <h3 data-ar="الصلاحيات" data-en="Permissions">الصلاحيات</h3>
-        <p data-ar="ضبط صلاحيات الأدوار والمستخدمين (Overrides)" data-en="Configure role permissions and user overrides">
-          ضبط صلاحيات الأدوار والمستخدمين (Overrides)
-        </p>
-        <a href="/superadmin/permissions.html" class="btn" data-ar="إدارة الصلاحيات" data-en="Manage Permissions">إدارة الصلاحيات</a>
+        <img src="/icon/group.png" alt="الصلاحيات ">
+        <h3 data-ar=" الصلاحيات" data-en="Permissions">الصلاحيات </h3>
+        <p data-ar="صلاحيات الوصول داخل النظام" data-en="Access permissions within the system.">تتبع حالة شكاواك المقدمة</p>
+        <a href="/superadmin/permissions.html" class="btn" data-ar="إدارة الصلاحيات " data-en="Manage Permissions"> إدارة الصلاحيات</a>
       </div>
-
-      <!-- إدارة المستخدمين + سويتش يوزر -->
       <div class="card">
-        <img src="/icon/admin.png" alt="Users icon">
+        <img src="/icon/admin.png" alt="إدارة المستخدمين">
         <h3 data-ar="إدارة المستخدمين" data-en="User Management">إدارة المستخدمين</h3>
-        <p data-ar="إدارة الحسابات والأدوار والسويتش يوزر (Impersonation)" data-en="Manage accounts, roles, and impersonation">
-          إدارة الحسابات والأدوار والسويتش يوزر (Impersonation)
+        <p data-ar="إدارة الحسابات، الأدوار، والسويتش يوزر" data-en="Manage accounts, roles, and switch user">
+          إدارة الحسابات، الأدوار، والسويتش يوزر
         </p>
-        <a href="/superadmin/manage-users.html" class="btn" data-ar="إدارة المستخدمين" data-en="Manage Users">إدارة المستخدمين</a>
+        <a href="/superadmin/manage-users.html" class="btn" 
+           data-ar="إدارة المستخدمين" data-en="Manage Users">إدارة المستخدمين</a>
       </div>
 
-      <!-- طلبات الحذف (المحذوفات) -->
-      <div class="card">
-        <img src="/icon/trash.png" alt="Deletes icon">
-        <h3 data-ar="طلبات الحذف" data-en="Delete Requests">طلبات الحذف</h3>
-        <p data-ar="مراجعة واعتماد/رفض حذف السجلات (مرحلة أخيرة للسوبر)" data-en="Review and approve/reject record deletions (final super step)">
-          مراجعة واعتماد/رفض حذف السجلات (مرحلة أخيرة للسوبر)
-        </p>
-        <a href="/superadmin/deleted-items.html" class="btn" data-ar="إدارة طلبات الحذف" data-en="Manage Delete Requests">إدارة طلبات الحذف</a>
-      </div>
-
-      <!-- طلبات إعادة فتح الشكاوى -->
-      <div class="card">
-        <img src="/icon/refresh.png" alt="Reopen icon">
-        <h3 data-ar="طلبات إعادة فتح الشكاوى" data-en="Complaint Reopen Requests">طلبات إعادة فتح الشكاوى</h3>
-        <p data-ar="اعتماد/رفض فتح شكوى مغلقة (حسب السياسة)" data-en="Approve/Reject reopening closed complaints">
-          اعتماد/رفض فتح شكوى مغلقة (حسب السياسة)
-        </p>
-        <a href="/superadmin/reopen-requests.html" class="btn" data-ar="مراجعة الطلبات" data-en="Review Requests">مراجعة الطلبات</a>
-      </div>
-
-      <!-- المميّزون -->
-      <div class="card">
-        <img src="/icon/star.png" alt="Featured icon">
-        <h3 data-ar="المميّزون" data-en="Featured">المميّزون</h3>
-        <p data-ar="إضافة/إدارة بطاقات المميّزين المعروضة في صفحات الهوم" data-en="Add/manage featured cards shown on home pages">
-          إضافة/إدارة بطاقات المميّزين المعروضة في صفحات الهوم
-        </p>
-        <a href="/superadmin/featured.html" class="btn" data-ar="إدارة المميّزين" data-en="Manage Featured">إدارة المميّزين</a>
-      </div>
+      
     </section>
   </main>
+<script src="superadmin.js"></script>
+<script src="superadmin-home.js"></script>
 
-  <!-- سكربتات الصفحة (بدون تعديل CSS) -->
-  <script src="superadmin.js"></script>
+
 </body>
+
 </html>

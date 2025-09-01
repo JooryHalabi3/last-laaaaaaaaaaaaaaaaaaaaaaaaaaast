@@ -3,17 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title data-ar="الصفحة الرئيسية — سوبر أدمن" data-en="Home — Super Admin">الصفحة الرئيسية — سوبر أدمن</title>
+  <title>الصفحة الرئيسية — سوبر أدمن</title>
 
-  <!-- Fonts -->
+  <!-- خطوط مطابقة للهوم -->
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
 
-  <!-- Page CSS -->
+  <!-- نفس ملف التنسيق -->
   <link rel="stylesheet" href="superadmin-home.css">
-
   <style>
-    /* نفس اللمسات الخفيفة التي كانت لديك */
+    /* لمسة بسيطة لتوسيط البطاقة الكبيرة */
     .dashboard { flex-wrap: wrap; }
     .card.full { flex-basis: 100%; }
     .kpi-wrap { margin: 12px 40px; display: grid; grid-template-columns: repeat(5,minmax(160px,1fr)); gap: 14px; }
@@ -24,14 +23,9 @@
     .comp-table{width:100%;border-collapse:collapse;font-size:.95rem}
     .comp-table th,.comp-table td{padding:10px 12px;border-bottom:1px solid #eee;text-align:center;white-space:nowrap}
     .comp-table thead th{background:#f8fafc;font-weight:600;position:sticky;top:0;z-index:1}
-    /* شريط الانتحال (السويتش يوزر) — مخفي افتراضياً */
-    #impersonation-banner{display:none;position:fixed;top:10px;left:10px;z-index:9999;background:#dc2626;color:#fff;padding:8px 12px;border-radius:6px}
-    #end-impersonation-btn{padding:6px 10px;border:none;border-radius:6px;background:#fff;color:#dc2626;cursor:pointer;margin-left:8px}
   </style>
 </head>
 <body>
-
-  <!-- Header -->
   <header class="header">
     <div class="header-content">
       <div class="header-title" data-ar="عُــــــونَك — سوبر أدمن" data-en="AOUNAK — Super Admin">عُــــــونَك — سوبر أدمن</div>
@@ -57,80 +51,63 @@
   </header>
 
   <main>
-    <!-- بطاقات الوصول السريع -->
-    <section class="dashboard">
-      <!-- تقديم شكوى جديدة -->
-      <div class="card">
-        <img src="/icon/plus.png" alt="">
-        <h3 data-ar="تقديم شكوى جديدة" data-en="Submit New Complaint">تقديم شكوى جديدة</h3>
-        <p data-ar="قم بتسجيل شكوى طبية جديدة" data-en="Register a new medical complaint">قم بتسجيل شكوى طبية جديدة</p>
-        <a href="/New complaint/Newcomplaint.html" class="btn" data-ar="تقديم شكوى" data-en="Submit">تقديم شكوى</a>
-      </div>
+    <!-- كروت السوبر أدمن فقط -->
+<!-- كروت الواجهة (مطابقة للصورة) -->
+<section class="dashboard">
+  <!-- تقديم شكوى جديدة -->
+  <div class="card">
+    <img src="/icon/plus.png" alt="">
+    <h3 data-ar="تقديم شكوى جديدة" data-en="Submit New Complaint">تقديم شكوى جديدة</h3>
+    <p data-ar="قم بتسجيل شكوى طبية جديدة" data-en="Register a new medical complaint">قم بتسجيل شكوى طبية جديدة</p>
+    <a href="/New complaint/Newcomplaint.html" class="btn" data-ar="تقديم شكوى" data-en="Submit">تقديم شكوى</a>
+  </div>
 
-      <!-- متابعة الشكاوى -->
-      <div class="card">
-        <img src="/icon/submit.png" alt="">
-        <h3 data-ar="متابعة الشكاوى" data-en="Track Complaints">متابعة الشكاوى</h3>
-        <p data-ar="تتبع حالة شكاوك المقدمة" data-en="Track the status of your complaints">تتبع حالة شكاوك المقدمة</p>
-        <a href="/Complaints-followup/followup.html" class="btn" data-ar="متابعة الشكاوي" data-en="Track">متابعة الشكاوي</a>
-      </div>
+  <!-- متابعة الشكاوى -->
+  <div class="card">
+    <img src="/icon/submit.png" alt="">
+    <h3 data-ar="متابعة الشكاوى" data-en="Track Complaints">متابعة الشكاوى</h3>
+    <p data-ar="تتبع حالة شكاوك المقدمة" data-en="Track the status of your complaints">تتبع حالة شكاوك المقدمة</p>
+    <a href="/Complaints-followup/followup.html" class="btn" data-ar="متابعة الشكاوي" data-en="Track">متابعة الشكاوي</a>
+  </div>
 
-      <!-- الشكاوى العامة -->
-      <div class="card">
-        <img src="/icon/message.png" alt="">
-        <h3 data-ar="الشكاوى العامة" data-en="General Complaints">الشكاوى العامة</h3>
-        <p data-ar="استعراض الشكاوى العامة المقدمة" data-en="Browse submitted general complaints">استعراض الشكاوى العامة المقدمة</p>
-        <a href="/general complaints/general-complaints.html" class="btn" data-ar="استعراض" data-en="Browse">استعراض</a>
-      </div>
+  <!-- الشكاوى العامة -->
+  <div class="card">
+    <img src="/icon/message.png" alt="">
+    <h3 data-ar="الشكاوى العامة" data-en="General Complaints">الشكاوى العامة</h3>
+    <p data-ar="استعراض الشكاوى العامة المقدمة" data-en="Browse submitted general complaints">استعراض الشكاوى العامة المقدمة</p>
+    <a href="/general complaints/general-complaints.html" class="btn" data-ar="استعراض" data-en="Browse">استعراض</a>
+  </div>
 
-      <!-- لوحة المعلومات -->
-      <div class="card">
-        <img src="/icon/chart.png" alt="">
-        <h3 data-ar="لوحة المعلومات" data-en="Analytics Dashboard">لوحة المعلومات</h3>
-        <p data-ar="إحصائيات وتحليلات الشكاوى والطلبات العامة"
-           data-en="Analytics of complaints and general requests">إحصائيات وتحليلات الشكاوى والطلبات العامة</p>
-        <a href="/DashBoard/overview.html" class="btn" data-ar="عرض التفاصيل" data-en="Details">عرض التفاصيل</a>
-      </div>
+  <!-- لوحة المعلومات -->
+  <div class="card">
+    <img src="/icon/chart.png" alt="">
+    <h3 data-ar="لوحة المعلومات" data-en="Analytics Dashboard">لوحة المعلومات</h3>
+    <p data-ar="إحصائيات وتحليلات الشكاوى والطلبات العامة"
+       data-en="Analytics of complaints and general requests">إحصائيات وتحليلات الشكاوى والطلبات العامة</p>
+    <a href="/DashBoard/overview.html" class="btn" data-ar="عرض التفاصيل" data-en="Details">عرض التفاصيل</a>
+  </div>
 
-      <!-- لوحة تحكم المسؤول -->
-      <div class="card">
-        <img src="/icon/gear.png" alt="">
-        <h3 data-ar="لوحة تحكم المسؤول" data-en="Admin Control Panel">لوحة تحكم المسؤول</h3>
-        <p data-ar="إدارة النظام والمستخدمين والصلاحيات" data-en="Manage system, users, and permissions">إدارة النظام والمستخدمين والصلاحيات</p>
-        <a href="/superadmin/superadmin.html" class="btn" data-ar="الدخول للوحة التحكم" data-en="Open Control Panel">الدخول للوحة التحكم</a>
-      </div>
+  <!-- لوحة تحكم المسؤول -->
+  <div class="card">
+    <img src="/icon/gear.png" alt="">
+    <h3 data-ar="لوحة تحكم المسؤول" data-en="Admin Control Panel">لوحة تحكم المسؤول</h3>
+    <p data-ar="إدارة النظام والمستخدمين والصلاحيات" data-en="Manage system, users, and permissions">
+      إدارة النظام والمستخدمين والصلاحيات
+    </p>
+    <a href="/superadmin/superadmin.html" class="btn" data-ar="الدخول للوحة التحكم" data-en="Open Control Panel">
+      الدخول للوحة التحكم
+    </a>
+  </div>
+</section>
 
-      <!-- المميزون (خاص بالسوبر) -->
-      <div class="card">
-        <img src="/icon/star.png" alt="">
-        <h3 data-ar="المميّزون" data-en="Featured">المميّزون</h3>
-        <p data-ar="إدارة بطاقات المميّزين المعروضة في صفحات الهوم" data-en="Manage featured cards shown on home pages">إدارة بطاقات المميّزين المعروضة في صفحات الهوم</p>
-        <a href="/superadmin/featured.html" class="btn" data-ar="إدارة المميّزين" data-en="Manage Featured">إدارة المميّزين</a>
-      </div>
-    </section>
 
     <!-- KPIs -->
     <section class="kpi-wrap" id="kpiWrap">
-      <div class="kpi">
-        <div class="t" data-ar="إجمالي الشكاوى" data-en="Total Complaints">إجمالي الشكاوى</div>
-        <div class="v" id="kpiTotal">—</div>
-      </div>
-      <div class="kpi">
-        <div class="t" data-ar="المفتوحة" data-en="Open">المفتوحة</div>
-        <div class="v" id="kpiOpen">—</div>
-      </div>
-      <div class="kpi">
-        <div class="t" data-ar="قيد المعالجة" data-en="In Progress">قيد المعالجة</div>
-        <div class="v" id="kpiWip">—</div>
-      </div>
-      <div class="kpi">
-        <div class="t" data-ar="المغلقة" data-en="Closed">المغلقة</div>
-        <div class="v" id="kpiClosed">—</div>
-      </div>
-      <div class="kpi">
-        <div class="t" data-ar="سجلات اليوم" data-en="Logs Today">سجلات اليوم</div>
-        <div class="v" id="kpiLogsToday">—</div>
-      </div>
+      <div class="kpi"><div class="t" data-ar="إجمالي الشكاوى" data-en="Total Complaints">إجمالي الشكاوى</div><div class="v" id="kpiTotal">—</div></div>
+      <div class="kpi"><div class="t" data-ar="المفتوحة" data-en="Open">المفتوحة</div><div class="v" id="kpiOpen">—</div></div>
+      <div class="kpi"><div class="t" data-ar="قيد المعالجة" data-en="In Progress">قيد المعالجة</div><div class="v" id="kpiWip">—</div></div>
+      <div class="kpi"><div class="t" data-ar="المغلقة" data-en="Closed">المغلقة</div><div class="v" id="kpiClosed">—</div></div>
+      <div class="kpi"><div class="t" data-ar="سجلات اليوم" data-en="Logs Today">سجلات اليوم</div><div class="v" id="kpiLogsToday">—</div></div>
     </section>
 
     <!-- آخر السجلات -->
@@ -148,9 +125,11 @@
         <tbody></tbody>
       </table>
     </section>
+
   </main>
 
-  <!-- Page JS -->
   <script src="./superadmin-home.js"></script>
+
+
 </body>
 </html>

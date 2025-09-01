@@ -9,14 +9,14 @@
   <!-- أيقونات Remix -->
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
   <link rel="stylesheet" href="details.css">
-</head>
+</head>  
 <body>
   <!-- رأس الصفحة -->
   <header class="header">
     <div class="header-content">
       <div class="header-title" data-ar="عُــــــونَك" data-en="AOUNAK">عُــــــونَك</div>
       <img src="/icon/hospital-logo.png" alt="Hospital Logo" class="header-logo">
-      <button id="langToggle" class="lang-toggle-btn">
+          <button id="langToggle" class="lang-toggle-btn">
         <img src="/icon/lang.png" alt="language" class="lang-icon" />
         <span id="langText">العربية | English</span>
       </button>
@@ -32,25 +32,15 @@
 
   <br><br>
 
-  <!-- بطاقة الشكوى -->
+  <!-- Card -->
   <div class="complaint-card">
     <!-- Header -->
     <div class="complaint-header">
       <div>
-        <div class="complaint-title" id="complaintTitle" data-ar="جاري التحميل..." data-en="Loading...">جاري التحميل...</div>
-        <div class="complaint-date" id="createdAt" data-ar="جاري التحميل..." data-en="Loading...">جاري التحميل...</div>
-        <!-- ADDED: رقم الشكوى -->
-        <div class="complaint-number" id="complaintNumber" title="رقم الشكوى">—</div>
+        <div class="complaint-title" data-ar="جاري التحميل..." data-en="Loading...">جاري التحميل...</div>
+        <div class="complaint-date" data-ar="جاري التحميل..." data-en="Loading...">جاري التحميل...</div>
       </div>
-
-      <div class="header-badges">
-        <!-- ADDED: شارة المصدر -->
-        <span id="sourceBadge" class="badge source-badge" data-source="">—</span>
-        <!-- ADDED: شارة الأولوية -->
-        <span id="priorityBadge" class="badge priority-badge" data-priority="">—</span>
-        <!-- الحالة (موجودة لديك) -->
-        <span class="complaint-status" id="statusBadge" data-ar="جاري التحميل..." data-en="Loading...">جاري التحميل...</span>
-      </div>
+      <span class="complaint-status" data-ar="جاري التحميل..." data-en="Loading...">جاري التحميل...</span>
     </div>
 
     <!-- بيانات مقدم الشكوى -->
@@ -100,33 +90,10 @@
       <div class="details-box" id="complaintDetails"></div>
     </div>
 
-    <!-- ADDED: الإسناد و الـ SLA -->
-    <div class="section">
-      <div class="section-title" data-ar="الإسناد" data-en="Assignment">الإسناد</div>
-      <div class="info-grid">
-        <div>
-          <div class="info-label" data-ar="المُسند إليه" data-en="Assignee">المُسند إليه</div>
-          <div class="info-value" id="assigneeName">—</div>
-        </div>
-        <div>
-          <div class="info-label" data-ar="الدور" data-en="Role">الدور</div>
-          <div class="info-value" id="assigneeRole">—</div>
-        </div>
-        <div>
-          <div class="info-label" data-ar="تاريخ الإسناد" data-en="Assigned At">تاريخ الإسناد</div>
-          <div class="info-value" id="assignedAt">—</div>
-        </div>
-        <div>
-          <div class="info-label" data-ar="SLA" data-en="SLA">SLA</div>
-          <div class="info-value"><span id="slaChip" class="sla-chip" data-level="">—</span></div>
-        </div>
-      </div>
-    </div>
-
     <!-- المرفقات -->
     <div class="section">
       <div class="section-title" data-ar="المرفقات" data-en="Attachments">المرفقات</div>
-      <div class="attachment-box" id="attachmentsContainer">
+      <div class="attachment-box">
         <!-- سيتم تعبئة المرفقات ديناميكياً -->
         <div class="attachment-file">
           <i class="ri-loader-line"></i>
@@ -135,63 +102,17 @@
       </div>
     </div>
 
-    <!-- ADDED: تنبيه القفل عند الإغلاق -->
-    <div id="closedNotice" class="alert" style="display:none">
-      <i class="ri-lock-2-line" aria-hidden="true"></i>
-      <span data-ar="هذه الشكوى مغلقة. لا يمكن إضافة ردود جديدة." data-en="This complaint is closed. Replies are locked.">
-        هذه الشكوى مغلقة. لا يمكن إضافة ردود جديدة.
-      </span>
-      <button id="requestReopenBtn" class="btn link">
-        <i class="ri-refresh-line"></i>
-        <span data-ar="طلب إعادة فتح" data-en="Request Reopen">طلب إعادة فتح</span>
-      </button>
-    </div>
-
-    <!-- الردود -->
+    <!-- الرد على الشكوى -->
     <div class="section">
-      <div class="section-title" data-ar="الردود" data-en="Replies">الردود</div>
-
-      <!-- قائمة الردود -->
-      <div id="repliesContainer" class="replies-list">
-        <!-- سيملأ بالردود ديناميكياً -->
-        <div class="reply-box">
-          <div class="reply-header">
-            <span class="reply-from">—</span>
-            <span class="reply-date">—</span>
-          </div>
-          <div class="reply-text">—</div>
-          <span class="reply-status">—</span>
+      <div class="section-title" data-ar="الرد على الشكوى" data-en="Response to Complaint">الرد على الشكوى</div>
+      <div class="reply-box">
+        <!-- سيتم تعبئة الرد ديناميكياً -->
+        <div class="reply-header">
+          <span class="reply-from" data-ar="إدارة تجربة المريض" data-en="Patient Experience Department">إدارة تجربة المريض</span>
+          <span class="reply-date" data-ar="جاري التحميل..." data-en="Loading...">جاري التحميل...</span>
         </div>
-      </div>
-
-      <!-- محرّر الرد (سيُخفى عند الإغلاق عبر JS) -->
-      <div id="replyComposer" class="reply-compose">
-        <label class="info-label" for="replyBody" data-ar="أضف ردًا" data-en="Add a Reply">أضف ردًا</label>
-        <textarea id="replyBody" class="reply-textarea" rows="4"
-                  placeholder="اكتب الرد هنا..."
-                  data-ar-placeholder="اكتب الرد هنا..."
-                  data-en-placeholder="Type your reply here..."></textarea>
-
-        <div class="compose-actions">
-          <label class="attach">
-            <i class="ri-attachment-2"></i>
-            <input type="file" id="replyAttachment" accept="image/*,application/pdf" hidden />
-            <span data-ar="إرفاق ملف (اختياري)" data-en="Attach file (optional)">إرفاق ملف (اختياري)</span>
-          </label>
-
-          <!-- ADDED: تحديث الحالة مع الرد -->
-          <select id="statusUpdate" class="status-select">
-            <option value="" data-ar="لا تغيّر الحالة" data-en="Keep Status">لا تغيّر الحالة</option>
-            <option value="in_progress" data-ar="قيد المعالجة" data-en="In Progress">قيد المعالجة</option>
-            <option value="responded" data-ar="تم الرد" data-en="Responded">تم الرد</option>
-            <option value="closed" data-ar="مغلقة" data-en="Closed">مغلقة</option>
-          </select>
-
-          <button id="sendReplyBtn" class="btn primary">
-            <i class="ri-send-plane-2-line"></i>
-            <span data-ar="إرسال" data-en="Send">إرسال</span>
-          </button>
-        </div>
+        <div class="reply-text" data-ar="جاري تحميل الرد..." data-en="Loading response...">جاري تحميل الرد...</div>
+        <span class="reply-status" data-ar="جاري التحميل..." data-en="Loading...">جاري التحميل...</span>
       </div>
     </div>
 
@@ -210,10 +131,9 @@
         <span data-ar="العودة لقائمة الشكاوى" data-en="Back to Complaints List">العودة لقائمة الشكاوى</span>
       </a>
       <div class="left-actions">
-        <!-- زر طلب إعادة فتح (بديل للتابع القديم، سيُدار بالـ JS) -->
-        <button class="reopen-btn" id="reopenBtn">
+        <button class="reopen-btn" onclick="reopenComplaint()">
           <i class="ri-refresh-line"></i>
-          <span data-ar="طلب إعادة فتح" data-en="Request Reopen">طلب إعادة فتح</span>
+          <span data-ar="إعادة فتح الشكوى" data-en="Reopen Complaint">إعادة فتح الشكوى</span>
         </button>
         <button class="print-btn" onclick="window.print()">
           <i class="ri-printer-line"></i>
@@ -225,29 +145,36 @@
 
   <script src="details.js"></script>
   <script>
-    (function () {
-      function redirectByRole() {
-        const user = JSON.parse(localStorage.getItem('user') || 'null');
-        if (!user) return '/login/login.html';
-        const roleId = Number(user.RoleID || user.roleId);
-        if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
-        if (roleId === 2) return '/employee/employee-home.html';     // موظف
-        if (roleId === 3) return '/dept-admin/dept-admin.html';      // أدمن
-        return '/login/login.html';
-      }
+  (function () {
+    // استخدمي نفس التخزين عندك: localStorage.user يحتوي RoleID
+   function redirectByRole() {
+      const user = JSON.parse(localStorage.getItem('user') || 'null');
+      if (!user) return '/login/login.html';
+      const roleId = Number(user.RoleID || user.roleId);
+      if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
+      if (roleId === 2) return '/employee/employee-home.html';   // موظف
+      if (roleId === 3) return '/dept-admin/dept-admin.html';  
+      return '/login/login.html'; // احتياطي
+    }
 
-      const homeLinks = document.querySelectorAll(
-        'aside .sidebar-menu a.menu-link[href$="/login/login.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
-      );
+    // كل روابط "الصفحة الرئيسية" الموجودة في الشريط الجانبي
+    const homeLinks = document.querySelectorAll(
+      'aside .sidebar-menu a.menu-link[href$="/login/login.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
+    );
 
-      homeLinks.forEach(a => {
-        a.addEventListener('click', (e) => {
-          e.preventDefault();
-          window.location.href = redirectByRole();
-        });
-        a.setAttribute('href', redirectByRole());
+    homeLinks.forEach(a => {
+      // خَلّي النقر يوجّه حسب الدور
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.location.href = redirectByRole();
       });
-    })();
-  </script>
+
+      // (اختياري) عدّلي الـ href الظاهر للـ Hover/Copy
+      a.setAttribute('href', redirectByRole());
+    });
+  })();
+</script>
+
 </body>
 </html>
+

@@ -12,19 +12,19 @@
   <link rel="stylesheet" href="department-complaints.css" />
 </head>
 
-<body>
-  <!-- Header (تم نقله داخل الـ body) -->
-  <header class="header">
-    <div class="header-content">
-      <div class="header-title" data-ar="عُــــــونَك" data-en="AOUNAK">عُــــــونَك</div>
-      <img src="/icon/hospital-logo.png" alt="شعار المستشفى" class="header-logo">
-      <button id="langToggle" class="lang-toggle-btn">
-        <img src="/icon/lang.png" alt="language" class="lang-icon" />
-        <span id="langText">العربية | English</span>
-      </button>
-    </div>
-  </header>
+<!-- Header مثل general -->
+<header class="header">
+  <div class="header-content">
+    <div class="header-title" data-ar="عُــــــونَك" data-en="AOUNAK">عُــــــونَك</div>
+    <img src="/icon/hospital-logo.png" alt="شعار المستشفى" class="header-logo">
+    <button id="langToggle" class="lang-toggle-btn">
+      <img src="/icon/lang.png" alt="language" class="lang-icon" />
+      <span id="langText">العربية | English</span>
+    </button>
+  </div>
+</header>
 
+<body>
   <div class="page-header">
     <h2 class="page-title" data-ar="شكاوى القسم" data-en="Department Complaints">شكاوى القسم</h2>
     <div class="back-button">
@@ -45,7 +45,7 @@
     </div>
   </div>
 
-  <!-- فلاتر -->
+  <!-- Filters (مشابهة للجينيرال) -->
   <section class="filters">
     <div class="row">
       <select class="dropdown" id="dateFilter">
@@ -54,104 +54,24 @@
         <option value="7" data-ar="آخر 7 أيام" data-en="Last 7 Days">آخر 7 أيام</option>
         <option value="3" data-ar="آخر 3 أيام" data-en="Last 3 Days">آخر 3 أيام</option>
       </select>
-
-      <input
-        type="text"
-        id="searchBox"
-        class="search-box"
-        placeholder="بحث برقم الشكوى أو العنوان"
-        data-ar-placeholder="بحث برقم الشكوى أو العنوان"
-        data-en-placeholder="Search by Complaint # or Title"
-      />
-
-      <!-- الحالة موحّدة مع السكيما -->
+      <input type="text" id="searchBox"
+             placeholder="بحث برقم الشكوى أو العنوان"
+             data-ar-placeholder="بحث برقم الشكوى أو العنوان"
+             data-en-placeholder="Search by Complaint # or Title"
+             class="search-box" />
       <select class="dropdown" id="statusFilter">
         <option value="" data-ar="الحالة" data-en="Status">الحالة</option>
-        <option value="open" data-ar="مفتوحة" data-en="Open">مفتوحة</option>
-        <option value="in_progress" data-ar="قيد المعالجة" data-en="In Progress">قيد المعالجة</option>
-        <option value="responded" data-ar="تم الرد" data-en="Responded">تم الرد</option>
-        <option value="closed" data-ar="مغلقة" data-en="Closed">مغلقة</option>
-      </select>
-
-      <!-- المصدر -->
-      <select class="dropdown" id="sourceFilter">
-        <option value="" data-ar="كل المصادر" data-en="All Sources">كل المصادر</option>
-        <option value="in_person" data-ar="حضوري" data-en="In Person">حضوري</option>
-        <option value="call_center" data-ar="كول سنتر" data-en="Call Center">كول سنتر</option>
-      </select>
-
-      <!-- نطاق الإسناد -->
-      <select class="dropdown" id="assigneeScope">
-        <option value="admin_queue" data-ar="قيد التوزيع (عندي كأدمن)" data-en="Admin queue">قيد التوزيع (عندي كأدمن)</option>
-        <option value="employee_assigned" data-ar="مسندة لموظف" data-en="Assigned to employee">مسندة لموظف</option>
-        <option value="all" data-ar="الكل" data-en="All">الكل</option>
+        <option value="جديدة" data-ar="جديدة" data-en="New">جديدة</option>
+        <option value="قيد المراجعة" data-ar="قيد المراجعة" data-en="Under Review">قيد المراجعة</option>
+        <option value="قيد المعالجة" data-ar="قيد المعالجة" data-en="Under Processing">قيد المعالجة</option>
+        <option value="تم الحل" data-ar="تم الحل" data-en="Resolved">تم الحل</option>
+        <option value="مغلقة" data-ar="مغلقة" data-en="Closed">مغلقة</option>
       </select>
     </div>
   </section>
 
-  <!-- شريط حالة القائمة -->
-  <div id="listState" class="state muted" aria-live="polite" style="margin:8px 16px;"></div>
-
-  <!-- قائمة الشكاوى (بطاقات) -->
-  <section class="complaints" id="cards">
-    <!-- ستُحقن البطاقات هنا عبر JS -->
-  </section>
-
-  <!-- قالب بطاقة شكوى للأدمن (يُستخدم من JS) -->
-  <template id="deptComplaintCardTemplate">
-    <article class="complaint-card" data-id="">
-      <header class="card-head">
-        <div class="left">
-          <span class="comp-no" title="رقم الشكوى">#000000</span>
-          <span class="badge source-badge" data-source="">—</span>
-          <span class="badge status-badge" data-status="">—</span>
-          <span class="badge priority-badge" data-priority="">—</span>
-        </div>
-        <div class="right">
-          <span class="chip sla-chip" data-level="" title="SLA">SLA</span>
-        </div>
-      </header>
-
-      <div class="card-body">
-        <h3 class="title">عنوان الشكوى</h3>
-
-        <div class="meta">
-          <span class="meta-item">
-            <strong data-ar="القسم" data-en="Dept">القسم:</strong>
-            <span class="dept-name">—</span>
-          </span>
-          <span class="meta-item">
-            <strong data-ar="التصنيف" data-en="Type">التصنيف:</strong>
-            <span class="reason-name">—</span> / <span class="subtype-name">—</span>
-          </span>
-        </div>
-
-        <div class="patient">
-          <strong data-ar="المريض" data-en="Patient">المريض:</strong>
-          <span class="patient-name">—</span>
-          <span class="muted">(<span class="patient-nid">—</span>)</span>
-        </div>
-
-        <div class="timeline">
-          <span><strong data-ar="الإنشاء" data-en="Created">الإنشاء:</strong> <span class="created-at">—</span></span>
-          <span><strong data-ar="آخر تحديث" data-en="Updated">آخر تحديث:</strong> <span class="updated-at">—</span></span>
-        </div>
-
-        <div class="assignee">
-          <strong data-ar="المُسند إليه" data-en="Assignee">المُسند إليه:</strong>
-          <span class="assignee-name">—</span>
-          <span class="muted assignee-hint" data-ar="(قيد التوزيع لدى الأدمن)" data-en="(pending admin distribution)">
-            (قيد التوزيع لدى الأدمن)
-          </span>
-        </div>
-      </div>
-
-      <footer class="card-foot">
-        <a class="btn small" href="#" data-action="details" data-ar="تفاصيل" data-en="Details">تفاصيل</a>
-        <button class="btn small outline" data-action="assign" data-ar="إسناد لموظف" data-en="Assign to employee">إسناد لموظف</button>
-      </footer>
-    </article>
-  </template>
+  <!-- قائمة الشكاوى -->
+  <section class="complaints" id="cards"></section>
 
   <!-- Empty/Error -->
   <div id="empty" class="no-complaints" style="display:none;">
@@ -173,31 +93,27 @@
     </button>
   </footer>
 
-  <!-- نافذة إسناد الشكوى لموظف (بديلة عن تحويل للقسم) -->
-  <div id="assignModal" class="modal-overlay" style="display:none;">
+  <!-- نافذة تحويل الشكوى -->
+  <div id="transferModal" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 data-ar="إسناد الشكوى لموظف" data-en="Assign Complaint to Employee">إسناد الشكوى لموظف</h3>
-        <button id="closeAssignModal" class="close-modal">×</button>
+        <h3 data-ar="تحويل الشكوى" data-en="Transfer Complaint">تحويل الشكوى</h3>
+        <button id="closeTransferModal" class="close-modal">×</button>
       </div>
       <div class="modal-body">
-        <label for="employeeSelect" data-ar="اختر الموظف" data-en="Select Employee">اختر الموظف</label>
-        <select id="employeeSelect" class="transfer-select">
-          <option value="" data-ar="اختر الموظف" data-en="Select Employee">اختر الموظف</option>
+        <p data-ar="اختر القسم الذي تريد تحويل الشكوى إليه:" data-en="Select the department to transfer the complaint to:">
+          اختر القسم الذي تريد تحويل الشكوى إليه:
+        </p>
+        <select id="transferDepartmentSelect" class="transfer-select">
+          <option value="" data-ar="اختر القسم" data-en="Select Department">اختر القسم</option>
         </select>
-
-        <label for="assignNotes" style="margin-top:10px" data-ar="ملاحظات الإسناد (اختياري)" data-en="Assignment notes (optional)">ملاحظات الإسناد (اختياري)</label>
-        <input id="assignNotes" class="transfer-notes" placeholder="مثال: أولوية مرتفعة — لبدء المعالجة اليوم"
-               data-ar-placeholder="ملاحظات الإسناد" data-en-placeholder="Assignment notes" />
       </div>
       <div class="modal-actions">
-        <button id="doAssignBtn" class="btn blue" data-ar="إسناد" data-en="Assign">إسناد</button>
-        <button id="cancelAssignBtn" class="btn gray" data-ar="إلغاء" data-en="Cancel">إلغاء</button>
+        <button id="doTransferBtn" class="btn blue" data-ar="تحويل" data-en="Transfer">تحويل</button>
+        <button id="cancelTransferBtn" class="btn gray" data-ar="إلغاء" data-en="Cancel">إلغاء</button>
       </div>
     </div>
   </div>
-
-  <!-- ملف الجافاسكربت (سنربط المنطق لاحقًا) -->
   <script src="department-complaints.js"></script>
 </body>
 </html>

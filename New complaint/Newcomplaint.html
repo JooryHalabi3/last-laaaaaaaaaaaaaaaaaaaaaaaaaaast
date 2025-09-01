@@ -1,14 +1,13 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
-
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title data-ar="تقديم شكوى جديدة" data-en="New Complaint">تقديم شكوى جديدة</title>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="Newcomplaint.css" />
-</head>
+</head> 
 
 <body>
   <header class="header">
@@ -33,26 +32,30 @@
     </div>
   </div>
 
-  <p class="page-subtitle" data-ar="يرجى تعبئة المعلومات بشكل دقيق لتسهيل معالجة شكواك"
-    data-en="Please fill in the details accurately to help us process your complaint">
-    يرجى تعبئة المعلومات بشكل دقيق لتسهيل معالجة شكواك
+  <p class="page-subtitle"
+     data-ar="يرجى تعبئة المعلومات بشكل دقيق لتسهيل معالجة شكواك"
+     data-en="Please fill in the details accurately to help us process your complaint">
+     يرجى تعبئة المعلومات بشكل دقيق لتسهيل معالجة شكواك
   </p>
 
   <main>
-
+    
     <!-- بيانات المريض -->
     <section class="form-section">
       <h3>
         <img src="/icon/patient.png" class="icon-title" alt="أيقونة المريض" />
-        <span data-ar="بيانات المريض / صاحب الشكوى" data-en="Patient / Complainant Info">بيانات المريض / صاحب
-          الشكوى</span>
+        <span data-ar="بيانات المريض / صاحب الشكوى" data-en="Patient / Complainant Info">بيانات المريض / صاحب الشكوى</span>
       </h3>
       <div class="form-grid">
-        <input type="text" id="fullName" placeholder="الاسم الكامل للمريض" data-ar-placeholder="الاسم الكامل للمريض"
-          data-en-placeholder="Full Name of Patient" />
+        <input type="text" id="fullName"
+               placeholder="الاسم الكامل للمريض"
+               data-ar-placeholder="الاسم الكامل للمريض"
+               data-en-placeholder="Full Name of Patient" />
 
-        <input type="text" id="nationalId" placeholder="رقم الهوية / الإقامة" data-ar-placeholder="رقم الهوية / الإقامة"
-          data-en-placeholder="National ID / Iqama" />
+        <input type="text" id="nationalId"
+               placeholder="رقم الهوية / الإقامة"
+               data-ar-placeholder="رقم الهوية / الإقامة"
+               data-en-placeholder="National ID / Iqama" />
 
         <select id="gender" data-ar-placeholder="اختر الجنس" data-en-placeholder="Select Gender">
           <option value="" disabled selected data-ar="اختر الجنس" data-en="Select Gender">اختر الجنس</option>
@@ -60,8 +63,10 @@
           <option value="أنثى" data-ar="أنثى" data-en="Female">أنثى</option>
         </select>
 
-        <input type="text" id="mobile" placeholder="رقم الجوال" data-ar-placeholder="رقم الجوال"
-          data-en-placeholder="Mobile Number" />
+        <input type="text" id="mobile"
+               placeholder="رقم الجوال"
+               data-ar-placeholder="رقم الجوال"
+               data-en-placeholder="Mobile Number" />
       </div>
     </section>
 
@@ -75,14 +80,11 @@
         <select id="department">
           <option disabled selected data-ar="اختر القسم" data-en="Select Department">اختر القسم</option>
         </select>
-        <select id="source">
-          <option value="" disabled selected data-ar="اختر المصدر" data-en="Select Source">اختر المصدر</option>
-          <option value="in_person" data-ar="حضوري" data-en="In Person">حضوري</option>
-          <option value="call_center" data-ar="مركز الاتصال" data-en="Call Center">مركز الاتصال</option>
-        </select>
 
-        <input type="date" id="visitDate" placeholder="تاريخ الزيارة" data-ar-placeholder="تاريخ الزيارة"
-          data-en-placeholder="Visit Date" />
+        <input type="date" id="visitDate"
+               placeholder="تاريخ الزيارة"
+               data-ar-placeholder="تاريخ الزيارة"
+               data-en-placeholder="Visit Date" />
       </div>
     </section>
 
@@ -98,13 +100,13 @@
         </select>
 
         <select id="subType">
-          <option disabled selected data-ar="اختر التصنيف الفرعي" data-en="Select Subcategory">اختر التصنيف الفرعي
-          </option>
+          <option disabled selected data-ar="اختر التصنيف الفرعي" data-en="Select Subcategory">اختر التصنيف الفرعي</option>
         </select>
 
-        <textarea id="details" placeholder="يرجى شرح التفاصيل بدقة"
-          data-ar-placeholder="يرجى شرح التفاصيل بدقة (مثلاً: أين، مع من، ...)"
-          data-en-placeholder="Please describe the details clearly (e.g., where, with whom, etc.)">
+        <textarea id="details"
+                  placeholder="يرجى شرح التفاصيل بدقة"
+                  data-ar-placeholder="يرجى شرح التفاصيل بدقة (مثلاً: أين، مع من، ...)"
+                  data-en-placeholder="Please describe the details clearly (e.g., where, with whom, etc.)">
         </textarea>
       </div>
     </section>
@@ -119,17 +121,15 @@
       <div class="attachments-container">
         <!-- منطقة رفع الملفات -->
         <div class="upload-zone" id="uploadZone">
-          <input type="file" id="attachments" accept="image/*,.pdf,.doc,.docx" multiple style="display: none;"
-            onchange="handleFileUpload(event)" />
-
+          <input type="file" id="attachments" accept="image/*,.pdf,.doc,.docx" multiple style="display: none;" onchange="handleFileUpload(event)" />
+          
           <div class="upload-content">
             <img src="/icon/attachment .png" alt="أيقونة إرفاق" class="upload-icon" />
             <div class="upload-text">
               <p data-ar="اضغط هنا لاختيار الملفات أو اسحبها" data-en="Click here to select files or drag them">
                 اضغط هنا لاختيار الملفات أو اسحبها
               </p>
-              <span class="file-types" data-ar="صور، PDF، Word (حد أقصى 15 ميجابايت)"
-                data-en="Images, PDF, Word (max 15MB)">
+              <span class="file-types" data-ar="صور، PDF، Word (حد أقصى 15 ميجابايت)" data-en="Images, PDF, Word (max 15MB)">
                 صور، PDF، Word (حد أقصى 15 ميجابايت)
               </span>
             </div>
@@ -160,42 +160,45 @@
 
     <!-- زر الإرسال -->
     <div class="submit-btn">
-      <button type="button" onclick="submitComplaint()" data-ar="إرسال الشكوى" data-en="Submit Complaint">
+      <button type="button"
+              onclick="submitComplaint()"
+              data-ar="إرسال الشكوى"
+              data-en="Submit Complaint">
         إرسال الشكوى
       </button>
     </div>
-  </main>
-  <script src="Newcomplaint.js"></script>
-  <script>
-    (function () {
-      // استخدمي نفس التخزين عندك: localStorage.user يحتوي RoleID
-      function redirectByRole() {
-        const user = JSON.parse(localStorage.getItem('user') || 'null');
-        if (!user) return '/login/login.html';
-        const roleId = Number(user.RoleID || user.roleId);
-        if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
-        if (roleId === 2) return '/employee/employee-home.html';   // موظف
-        if (roleId === 3) return '/dept-admin/dept-admin.html';
-        return '/login/login.html'; // احتياطي
-      }
+</main>
+<script src="Newcomplaint.js"></script>
+<script>
+  (function () {
+    // استخدمي نفس التخزين عندك: localStorage.user يحتوي RoleID
+    function redirectByRole() {
+      const user = JSON.parse(localStorage.getItem('user') || 'null');
+      if (!user) return '/login/login.html';
+      const roleId = Number(user.RoleID || user.roleId);
+      if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
+      if (roleId === 2) return '/employee/employee-home.html';   // موظف
+      if (roleId === 3) return '/dept-admin/dept-admin.html';  
+      return '/login/login.html'; // احتياطي
+    }
 
-      // كل روابط "الصفحة الرئيسية" الموجودة في الشريط الجانبي
-      const homeLinks = document.querySelectorAll(
-        'aside .sidebar-menu a.menu-link[href$="/login/login.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
-      );
+    // كل روابط "الصفحة الرئيسية" الموجودة في الشريط الجانبي
+    const homeLinks = document.querySelectorAll(
+      'aside .sidebar-menu a.menu-link[href$="/login/login.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
+    );
 
-      homeLinks.forEach(a => {
-        // خَلّي النقر يوجّه حسب الدور
-        a.addEventListener('click', (e) => {
-          e.preventDefault();
-          window.location.href = redirectByRole();
-        });
-
-        // (اختياري) عدّلي الـ href الظاهر للـ Hover/Copy
-        a.setAttribute('href', redirectByRole());
+    homeLinks.forEach(a => {
+      // خَلّي النقر يوجّه حسب الدور
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.location.href = redirectByRole();
       });
-    })();
-  </script>
+
+      // (اختياري) عدّلي الـ href الظاهر للـ Hover/Copy
+      a.setAttribute('href', redirectByRole());
+    });
+  })();
+</script>
 
 </body>
 

@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title data-ar="لوحة إدارة القسم" data-en="Department Admin Dashboard">Department Admin Dashboard</title>
 
-  <!-- خطوط -->
+  <!-- خطوط مطابقة للهوم -->
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
 
-  <!-- ستايل -->
+  <!-- نفس ملف التنسيق -->
   <link rel="stylesheet" href="dept-admin.css">
   <style>
+    /* لمسة بسيطة لتوسيط البطاقة الكبيرة */
     .dashboard { flex-wrap: wrap; }
     .card.full { flex-basis: 100%; }
     .kpi-wrap { margin: 12px 40px; display: grid; grid-template-columns: repeat(4,minmax(160px,1fr)); gap: 14px; }
@@ -29,53 +30,32 @@
     .refresh-btn svg{width:14px;height:14px}
     .animate-spin{animation:spin 1s linear infinite}
     @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-    /* إشعارات */
-    .notif-dropdown{position:absolute; top:56px; inset-inline-end:16px; width:340px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.08); display:none; z-index:1000}
-    .notif-dropdown header{padding:10px 12px; border-bottom:1px solid #f1f5f9; font-weight:700}
-    .notif-list{max-height:360px; overflow:auto}
-    .notif-empty, .notif-error, .notif-loading{padding:16px; color:#64748b; text-align:center}
-    .notif-item{padding:10px 12px; border-bottom:1px solid #f8fafc; display:flex; gap:10px; align-items:flex-start}
-    .notif-item .meta{font-size:.8rem; color:#64748b}
-    .badge-status{padding:2px 8px; border-radius:999px; font-size:.75rem; border:1px solid #e5e7eb; background:#f8fafc}
   </style>
 </head>
-<body data-impersonating="false">
+<body>
   <header class="header">
     <div class="header-content">
       <div class="header-title" data-ar="عُــــــونَك — مدير القسم" data-en="AOUNAK — Department Admin">عُــــــونَك — مدير القسم</div>
       <img src="/icon/hospital-logo.png" alt="شعار" class="header-logo"/>
-
-      <!-- راية الانتحال -->
-      <div id="impersonation-banner" style="display:none; position:fixed; top:10px; left:10px; z-index:9999;">
-        <button id="end-impersonation-btn"
-                style="padding:8px 12px; border:none; border-radius:6px; background:#dc2626; color:#fff; cursor:pointer;">
-          🔙 الرجوع لحساب السوبر
-        </button>
-      </div>
+<!-- Banner hidden by default -->
+<div id="impersonation-banner" style="display:none; position:fixed; top:10px; left:10px; z-index:9999;">
+  <button id="end-impersonation-btn"
+          style="padding:8px 12px; border:none; border-radius:6px; background:#dc2626; color:#fff; cursor:pointer;">
+    🔙 الرجوع لحساب السوبر
+  </button>
+</div>
 
       <a href="/login/profile.html" class="profile-link">
         <img src="/icon/patient1.png" class="profile-icon-small" alt="الملف الشخصي">
         <span data-ar="الملف الشخصي" data-en="Profile">الملف الشخصي</span>
       </a>
 
-      <!-- زر الإشعارات -->
-      <button id="notifBtn" class="notif-btn" title="الإشعارات" aria-expanded="false" aria-controls="notifDropdown">
+      <button id="notifBtn" class="notif-btn" title="الإشعارات">
         <svg class="notif-icon" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 2c.7 0 1.25.56 1.25 1.25v.51A6.75 6.75 0 0 1 19 10.5v4.06l1.49 2.49c.3.5-.06 1.12-.64 1.12H4.15c-.58 0-.94-.62-.64-1.12L5 14.56V10.5A6.75 6.75 0 0 1 10.75 3.76v-.51C10.75 2.56 11.3 2 12 2zm0 20a2.75 2.75 0 0 1-2.62-2h5.24A2.75 2.75 0 0 1 12 22z"/>
         </svg>
         <span id="notifCount" class="notif-count" style="display:none;">0</span>
       </button>
-
-      <!-- قائمة الإشعارات -->
-      <div id="notifDropdown" class="notif-dropdown" role="region" aria-label="Notifications">
-        <header>
-          <span data-ar="الإشعارات" data-en="Notifications">الإشعارات</span>
-        </header>
-        <div class="notif-loading" id="notifLoading" style="display:none;">جارِ التحميل…</div>
-        <div class="notif-error" id="notifError" style="display:none;">حدث خطأ في جلب الإشعارات</div>
-        <div class="notif-empty" id="notifEmpty" style="display:none;">لا توجد إشعارات</div>
-        <div class="notif-list" id="notifList"></div>
-      </div>
 
       <button id="langToggle" class="lang-toggle-btn">
         <img src="/icon/lang.png" class="lang-icon" alt="اللغة"/>
@@ -90,37 +70,37 @@
   </header>
 
   <main>
-    <!-- بطاقات — مقيّدة بالأذونات -->
+    <!-- كروت مدير القسم فقط -->
     <section class="dashboard">
-      <div class="card" data-perm="dashboard.view">
+      <div class="card">
         <img src="/icon/chart.png" alt="">
         <h3 data-ar="لوحة القسم" data-en="Department Dashboard">لوحة القسم</h3>
         <p data-ar="نظرة شاملة على شكاوى وطلبات القسم" data-en="Overview of department complaints and requests">نظرة شاملة على شكاوى وطلبات القسم</p>
         <a href="/dept-admin/dept-dashboard.html" class="btn" data-ar="عرض التفاصيل" data-en="Open Dashboard">عرض التفاصيل</a>
       </div>
 
-      <div class="card" data-perm="employees.manage">
+      <div class="card">
         <img src="/icon/group.png" alt="">
         <h3 data-ar="موظفي القسم" data-en="Department Employees">موظفي القسم</h3>
         <p data-ar="إدارة موظفي القسم وصلاحياتهم" data-en="Manage department employees and permissions">إدارة موظفي القسم وصلاحياتهم</p>
         <a href="/dept-admin/department-management.html" class="btn" data-ar="إدارة الموظفين" data-en="Manage Employees">إدارة الموظفين</a>
       </div>
 
-      <div class="card" data-perm="complaints.view">
+      <div class="card">
         <img src="/icon/list.png" alt="">
         <h3 data-ar="شكاوى القسم" data-en="Department Complaints">شكاوى القسم</h3>
         <p data-ar="عرض وإدارة شكاوى القسم" data-en="View and manage department complaints">عرض وإدارة شكاوى القسم</p>
         <a href="/dept-admin/department-complaints.html" class="btn" data-ar="عرض الشكاوى" data-en="View Complaints">عرض الشكاوى</a>
       </div>
 
-      <div class="card" data-perm="complaints.assign">
+      <div class="card">
         <img src="/icon/assignment.png" alt="">
         <h3 data-ar="توزيع الشكاوى" data-en="Complaint Assignment">توزيع الشكاوى</h3>
         <p data-ar="توزيع الشكاوى على موظفي القسم" data-en="Assign complaints to department employees">توزيع الشكاوى على موظفي القسم</p>
         <a href="#" onclick="openComplaintAssignment()" class="btn" data-ar="توزيع الشكاوى" data-en="Assign Complaints">توزيع الشكاوى</a>
       </div>
 
-      <div class="card" data-perm="permissions.manage">
+      <div class="card">
         <img src="/icon/permissions.png" alt="">
         <h3 data-ar="إدارة الصلاحيات" data-en="Permission Management">إدارة الصلاحيات</h3>
         <p data-ar="إدارة صلاحيات موظفي القسم" data-en="Manage department employee permissions">إدارة صلاحيات موظفي القسم</p>
@@ -128,8 +108,8 @@
       </div>
     </section>
 
-    <!-- KPIs -->
-    <section class="kpi-wrap" id="kpiWrap" aria-live="polite">
+    <!-- KPIs الخاصة بالقسم -->
+    <section class="kpi-wrap" id="kpiWrap">
       <div class="kpi"><div class="t" data-ar="إجمالي شكاوى القسم" data-en="Total Department Complaints">إجمالي شكاوى القسم</div><div class="v" id="kpiTotal">—</div></div>
       <div class="kpi"><div class="t" data-ar="المفتوحة" data-en="Open">المفتوحة</div><div class="v" id="kpiOpen">—</div></div>
       <div class="kpi"><div class="t" data-ar="قيد المعالجة" data-en="In Progress">قيد المعالجة</div><div class="v" id="kpiWip">—</div></div>
@@ -146,10 +126,6 @@
     <!-- آخر شكاوى القسم -->
     <section class="list-card">
       <div class="table-title" data-ar="آخر 10 شكاوى القسم" data-en="Latest 10 Department Complaints">آخر 10 شكاوى القسم</div>
-
-      <!-- حالات -->
-      <div id="deptComplaintsState" class="muted" aria-live="polite" style="padding:6px 0;"></div>
-
       <table class="comp-table" id="complaintsTable">
         <thead>
           <tr>
@@ -162,16 +138,18 @@
         <tbody></tbody>
       </table>
     </section>
+
   </main>
 
   <!-- Department Employees Modal -->
-  <div id="employeesModal" class="modal" aria-hidden="true" aria-labelledby="employeesTitle" role="dialog">
+  <div id="employeesModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="employeesTitle" data-ar="موظفي القسم" data-en="Department Employees">Department Employees</h2>
+        <h2 data-ar="موظفي القسم" data-en="Department Employees">Department Employees</h2>
         <span class="close" onclick="closeModal('employeesModal')">&times;</span>
       </div>
       <div class="modal-body">
+        <!-- Search and Filters Section -->
         <div class="search-filters-section">
           <div class="search-bar">
             <input type="text" id="employeeSearch" placeholder="Search by Full Name or Employee ID..." data-ar-placeholder="البحث بالاسم الكامل أو رقم الموظف..." data-en-placeholder="Search by Full Name or Employee ID...">
@@ -180,9 +158,9 @@
           </div>
           <div class="quick-filters">
             <select id="roleFilter" onchange="filterEmployees()">
-              <option value="" data-roleid="" data-ar="جميع الأدوار" data-en="All Roles">All Roles</option>
-              <option value="EMPLOYEE" data-roleid="2" data-ar="موظف" data-en="Employee">Employee</option>
-              <option value="ADMIN" data-roleid="3" data-ar="مدير قسم" data-en="Department Admin">Department Admin</option>
+              <option value="" data-ar="جميع الأدوار" data-en="All Roles">All Roles</option>
+              <option value="EMPLOYEE" data-ar="موظف" data-en="Employee">Employee</option>
+              <option value="ADMIN" data-ar="مدير قسم" data-en="Department Admin">Department Admin</option>
             </select>
             <select id="statusFilter" onchange="filterEmployees()">
               <option value="" data-ar="جميع الحالات" data-en="All Status">All Status</option>
@@ -192,21 +170,24 @@
           </div>
         </div>
 
+        <!-- Loading State -->
         <div id="employeesLoading" class="loading-overlay" style="display: none;">
           <div class="loading-spinner"></div>
-          <div class="muted">جارِ التحميل…</div>
         </div>
 
+        <!-- Empty State -->
         <div id="employeesEmptyState" class="empty-state" style="display: none;">
           <p data-ar="لا يوجد موظفين في قسمك" data-en="No employees found in your department">No employees found in your department</p>
           <button onclick="clearEmployeeFilters()" data-ar="مسح الفلاتر" data-en="Clear Filters">Clear Filters</button>
         </div>
 
+        <!-- Error State -->
         <div id="employeesErrorState" class="error-state" style="display: none;">
           <p data-ar="حدث خطأ في تحميل البيانات" data-en="Error loading data">Error loading data</p>
           <button onclick="loadDepartmentEmployees()" data-ar="إعادة المحاولة" data-en="Retry">Retry</button>
         </div>
 
+        <!-- Employees Table -->
         <div class="employees-table-container">
           <table id="employeesTable" class="data-table">
             <thead>
@@ -222,11 +203,13 @@
                 <th data-ar="الإجراءات" data-en="Actions">Actions</th>
               </tr>
             </thead>
-            <tbody id="employeesTableBody"></tbody>
+            <tbody id="employeesTableBody">
+              <!-- Employees will be loaded here -->
+            </tbody>
           </table>
-          <div id="employeesTableState" class="muted" aria-live="polite" style="padding:6px 0;"></div>
         </div>
 
+        <!-- Pagination -->
         <div class="pagination" id="employeesPagination" style="display: none;">
           <button onclick="previousPage()" data-ar="السابق" data-en="Previous">Previous</button>
           <span id="pageInfo" data-ar="الصفحة" data-en="Page">Page</span>
@@ -237,10 +220,10 @@
   </div>
 
   <!-- Department Complaints Modal -->
-  <div id="complaintsModal" class="modal" aria-hidden="true" aria-labelledby="complaintsTitle" role="dialog">
+  <div id="complaintsModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="complaintsTitle" data-ar="شكاوى القسم" data-en="Department Complaints">Department Complaints</h2>
+        <h2 data-ar="شكاوى القسم" data-en="Department Complaints">Department Complaints</h2>
         <span class="close" onclick="closeModal('complaintsModal')">&times;</span>
       </div>
       <div class="modal-body">
@@ -248,11 +231,6 @@
           <input type="text" id="complaintSearch" placeholder="Search complaints..." data-ar-placeholder="البحث في الشكاوى..." data-en-placeholder="Search complaints...">
           <button onclick="searchComplaints()" data-ar="بحث" data-en="Search">Search</button>
         </div>
-
-        <div id="deptComplaintsLoading" class="loading-overlay" style="display:none;"><div class="loading-spinner"></div></div>
-        <div id="deptComplaintsError" class="error-state" style="display:none;">تعذّر تحميل الشكاوى</div>
-        <div id="deptComplaintsEmpty" class="empty-state" style="display:none;">لا توجد شكاوى</div>
-
         <div class="complaints-table-container">
           <table id="departmentComplaintsTable" class="data-table">
             <thead>
@@ -264,7 +242,9 @@
                 <th data-ar="الإجراءات" data-en="Actions">Actions</th>
               </tr>
             </thead>
-            <tbody id="departmentComplaintsTableBody"></tbody>
+            <tbody id="departmentComplaintsTableBody">
+              <!-- Complaints will be loaded here -->
+            </tbody>
           </table>
         </div>
       </div>
@@ -272,10 +252,10 @@
   </div>
 
   <!-- Complaint Assignment Modal -->
-  <div id="assignmentModal" class="modal" aria-hidden="true" aria-labelledby="assignmentTitle" role="dialog">
+  <div id="assignmentModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="assignmentTitle" data-ar="توزيع الشكاوى" data-en="Complaint Assignment">Complaint Assignment</h2>
+        <h2 data-ar="توزيع الشكاوى" data-en="Complaint Assignment">Complaint Assignment</h2>
         <span class="close" onclick="closeModal('assignmentModal')">&times;</span>
       </div>
       <div class="modal-body">
@@ -285,34 +265,31 @@
             <option value="all" data-ar="جميع الشكاوى" data-en="All Complaints">All Complaints</option>
           </select>
         </div>
-
-        <div id="assignmentLoadingState" class="loading-overlay" style="display:none;"><div class="loading-spinner"></div></div>
-        <div id="assignmentErrorState" class="error-state" style="display:none;">تعذّر تحميل قائمة الشكاوى</div>
-        <div id="assignmentEmptyState" class="empty-state" style="display:none;">لا توجد شكاوى مطابقة</div>
-
-        <div class="assignment-table-container">
-          <table id="assignmentTable" class="data-table">
-            <thead>
-              <tr>
-                <th data-ar="رقم الشكوى" data-en="Complaint ID">Complaint ID</th>
-                <th data-ar="الموظف المسؤول" data-en="Assigned Employee">Assigned Employee</th>
-                <th data-ar="الحالة" data-en="Status">Status</th>
-                <th data-ar="تاريخ التقديم" data-en="Submission Date">Submission Date</th>
-                <th data-ar="الإجراءات" data-en="Actions">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="assignmentTableBody"></tbody>
-          </table>
-        </div>
+                 <div class="assignment-table-container">
+           <table id="assignmentTable" class="data-table">
+             <thead>
+               <tr>
+                 <th data-ar="رقم الشكوى" data-en="Complaint ID">Complaint ID</th>
+                 <th data-ar="الموظف المسؤول" data-en="Assigned Employee">Assigned Employee</th>
+                 <th data-ar="الحالة" data-en="Status">Status</th>
+                 <th data-ar="تاريخ التقديم" data-en="Submission Date">Submission Date</th>
+                 <th data-ar="الإجراءات" data-en="Actions">Actions</th>
+               </tr>
+             </thead>
+             <tbody id="assignmentTableBody">
+               <!-- Assignment data will be loaded here -->
+             </tbody>
+           </table>
+         </div>
       </div>
     </div>
   </div>
 
   <!-- Department Logs Modal -->
-  <div id="logsModal" class="modal" aria-hidden="true" aria-labelledby="logsTitle" role="dialog">
+  <div id="logsModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="logsTitle" data-ar="سجلات القسم" data-en="Department Logs">Department Logs</h2>
+        <h2 data-ar="سجلات القسم" data-en="Department Logs">Department Logs</h2>
         <span class="close" onclick="closeModal('logsModal')">&times;</span>
       </div>
       <div class="modal-body">
@@ -324,11 +301,6 @@
             <option value="assignment" data-ar="توزيع" data-en="Assignment">Assignment</option>
           </select>
         </div>
-
-        <div id="logsLoadingState" class="loading-overlay" style="display:none;"><div class="loading-spinner"></div></div>
-        <div id="logsErrorState" class="error-state" style="display:none;">تعذّر تحميل السجلات</div>
-        <div id="logsEmptyState" class="empty-state" style="display:none;">لا توجد سجلات</div>
-
         <div class="logs-table-container">
           <table id="departmentLogsTable" class="data-table">
             <thead>
@@ -339,7 +311,9 @@
                 <th data-ar="الوصف" data-en="Description">Description</th>
               </tr>
             </thead>
-            <tbody id="departmentLogsTableBody"></tbody>
+            <tbody id="departmentLogsTableBody">
+              <!-- Logs will be loaded here -->
+            </tbody>
           </table>
         </div>
       </div>
@@ -347,10 +321,10 @@
   </div>
 
   <!-- Department Permissions Modal -->
-  <div id="permissionsModal" class="modal" aria-hidden="true" aria-labelledby="permissionsTitle" role="dialog">
+  <div id="permissionsModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="permissionsTitle" data-ar="إدارة صلاحيات القسم" data-en="Department Permission Management">Department Permission Management</h2>
+        <h2 data-ar="إدارة صلاحيات القسم" data-en="Department Permission Management">Department Permission Management</h2>
         <span class="close" onclick="closeModal('permissionsModal')">&times;</span>
       </div>
       <div class="modal-body">
@@ -358,11 +332,6 @@
           <input type="text" id="permissionSearch" placeholder="Search by name or employee number..." data-ar-placeholder="البحث بالاسم أو رقم الموظف..." data-en-placeholder="Search by name or employee number...">
           <button onclick="searchEmployeesForPermissions()" data-ar="بحث" data-en="Search">Search</button>
         </div>
-
-        <div id="permLoadingState" class="loading-overlay" style="display:none;"><div class="loading-spinner"></div></div>
-        <div id="permErrorState" class="error-state" style="display:none;">تعذّر تحميل البيانات</div>
-        <div id="permEmptyState" class="empty-state" style="display:none;">لا نتائج</div>
-
         <div class="permissions-table-container">
           <table id="permissionsTable" class="data-table">
             <thead>
@@ -374,117 +343,80 @@
                 <th data-ar="الإجراءات" data-en="Actions">Actions</th>
               </tr>
             </thead>
-            <tbody id="permissionsTableBody"></tbody>
+            <tbody id="permissionsTableBody">
+              <!-- Permissions data will be loaded here -->
+            </tbody>
           </table>
         </div>
       </div>
     </div>
-  </div>
+     </div>
 
-  <!-- Individual Assignment Modal -->
-  <div id="individualAssignmentModal" class="modal" aria-hidden="true" aria-labelledby="indAssignTitle" role="dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="indAssignTitle" data-ar="توزيع الشكوى" data-en="Assign Complaint">Assign Complaint</h2>
-        <span class="close" onclick="closeIndividualAssignmentModal()">&times;</span>
-      </div>
-      <div class="modal-body">
-        <div id="assignmentLoading" class="loading-overlay" style="display: none;">
-          <div class="loading-spinner"></div>
-          <p data-ar="جاري تحميل الموظفين..." data-en="Loading employees...">Loading employees...</p>
-        </div>
+   <!-- Individual Assignment Modal -->
+   <div id="individualAssignmentModal" class="modal">
+     <div class="modal-content">
+       <div class="modal-header">
+         <h2 data-ar="توزيع الشكوى" data-en="Assign Complaint">Assign Complaint</h2>
+         <span class="close" onclick="closeIndividualAssignmentModal()">&times;</span>
+       </div>
+       <div class="modal-body">
+         <!-- Loading State -->
+         <div id="assignmentLoading" class="loading-overlay" style="display: none;">
+           <div class="loading-spinner"></div>
+           <p data-ar="جاري تحميل الموظفين..." data-en="Loading employees...">Loading employees...</p>
+         </div>
+         
+         <div class="form-group">
+           <label for="employeeSelect" data-ar="اختر موظف:" data-en="Select Employee:">Select Employee:</label>
+           <select id="employeeSelect" class="form-control">
+             <option value="">اختر موظف...</option>
+           </select>
+         </div>
+         <div class="modal-actions">
+           <button onclick="closeIndividualAssignmentModal()" class="btn-cancel" data-ar="إلغاء" data-en="Cancel">Cancel</button>
+           <button onclick="confirmAssignment()" class="btn-confirm" data-ar="تأكيد التوزيع" data-en="Confirm Assignment">Confirm Assignment</button>
+         </div>
+       </div>
+     </div>
+   </div>
 
-        <div class="form-group">
-          <label for="employeeSelect" data-ar="اختر موظف:" data-en="Select Employee:">Select Employee:</label>
-          <select id="employeeSelect" class="form-control">
-            <option value="">اختر موظف...</option>
-          </select>
-        </div>
-        <div class="modal-actions">
-          <button onclick="closeIndividualAssignmentModal()" class="btn-cancel" data-ar="إلغاء" data-en="Cancel">Cancel</button>
-          <button onclick="confirmAssignment()" class="btn-confirm" data-ar="تأكيد التوزيع" data-en="Confirm Assignment">Confirm Assignment</button>
-        </div>
-      </div>
-    </div>
-  </div>
+   <!-- Edit Permissions Modal -->
+   <div id="editPermissionsModal" class="modal">
+     <div class="modal-content">
+       <div class="modal-header">
+         <h2 data-ar="تعديل صلاحيات الموظف" data-en="Edit Employee Permissions">Edit Employee Permissions</h2>
+         <span class="close" onclick="closeEditPermissionsModal()">&times;</span>
+       </div>
+       <div class="modal-body">
+         <!-- Loading State -->
+         <div id="permissionsLoading" class="loading-overlay" style="display: none;">
+           <div class="loading-spinner"></div>
+           <p data-ar="جاري تحميل الصلاحيات..." data-en="Loading permissions...">Loading permissions...</p>
+         </div>
+         
+         <!-- Employee Info -->
+         <div class="employee-info-section">
+           <h3 id="employeeName" data-ar="اسم الموظف" data-en="Employee Name">Employee Name</h3>
+           <p id="employeeDetails" data-ar="تفاصيل الموظف" data-en="Employee Details">Employee Details</p>
+         </div>
+         
+         <!-- Permissions Section -->
+         <div class="permissions-section">
+           <h4 data-ar="الصلاحيات المتاحة" data-en="Available Permissions">Available Permissions</h4>
+           <div class="permissions-grid" id="permissionsGrid">
+             <!-- Permissions checkboxes will be loaded here -->
+           </div>
+         </div>
+         
+         <div class="modal-actions">
+           <button onclick="closeEditPermissionsModal()" class="btn-cancel" data-ar="إلغاء" data-en="Cancel">Cancel</button>
+           <button onclick="saveEmployeePermissions()" class="btn-confirm" data-ar="حفظ الصلاحيات" data-en="Save Permissions">Save Permissions</button>
+         </div>
+       </div>
+     </div>
+   </div>
 
-  <!-- Edit Permissions Modal -->
-  <div id="editPermissionsModal" class="modal" aria-hidden="true" aria-labelledby="editPermTitle" role="dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="editPermTitle" data-ar="تعديل صلاحيات الموظف" data-en="Edit Employee Permissions">Edit Employee Permissions</h2>
-        <span class="close" onclick="closeEditPermissionsModal()">&times;</span>
-      </div>
-      <div class="modal-body">
-        <div id="permissionsLoading" class="loading-overlay" style="display: none;">
-          <div class="loading-spinner"></div>
-          <p data-ar="جاري تحميل الصلاحيات..." data-en="Loading permissions...">Loading permissions...</p>
-        </div>
+      <script src="./dept-admin.js"></script>
 
-        <div class="employee-info-section">
-          <h3 id="employeeName" data-ar="اسم الموظف" data-en="Employee Name">Employee Name</h3>
-          <p id="employeeDetails" data-ar="تفاصيل الموظف" data-en="Employee Details">Employee Details</p>
-        </div>
-
-        <div class="permissions-section">
-          <h4 data-ar="الصلاحيات المتاحة" data-en="Available Permissions">Available Permissions</h4>
-          <div class="permissions-grid" id="permissionsGrid"></div>
-        </div>
-
-        <div class="modal-actions">
-          <button onclick="closeEditPermissionsModal()" class="btn-cancel" data-ar="إلغاء" data-en="Cancel">Cancel</button>
-          <button onclick="saveEmployeePermissions()" class="btn-confirm" data-ar="حفظ الصلاحيات" data-en="Save Permissions">Save Permissions</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- قوالب للاستخدام من JS -->
-  <template id="notifItemTemplate">
-    <div class="notif-item" data-id="">
-      <div class="icon">🔔</div>
-      <div class="content">
-        <div class="title">—</div>
-        <div class="meta">—</div>
-      </div>
-      <span class="badge-status">new</span>
-    </div>
-  </template>
-
-  <template id="employeeRowTemplate">
-    <tr>
-      <td class="emp-id">—</td>
-      <td class="emp-name">—</td>
-      <td class="emp-email">—</td>
-      <td class="emp-dept">—</td>
-      <td class="emp-role">—</td>
-      <td class="emp-status">—</td>
-      <td class="emp-phone">—</td>
-      <td class="emp-username">—</td>
-      <td class="emp-actions">—</td>
-    </tr>
-  </template>
-
-  <template id="complaintRowTemplate">
-    <tr>
-      <td class="c-id">—</td>
-      <td class="c-employee">—</td>
-      <td class="c-status">—</td>
-      <td class="c-date">—</td>
-      <td class="c-actions">—</td>
-    </tr>
-  </template>
-
-  <template id="permissionRowTemplate">
-    <tr>
-      <td class="p-name">—</td>
-      <td class="p-empno">—</td>
-      <td class="p-role">—</td>
-      <td class="p-perms">—</td>
-      <td class="p-actions">—</td>
-    </tr>
-  </template>
-
-  <script src="./dept-admin.js"></script>
 </body>
 </html>
