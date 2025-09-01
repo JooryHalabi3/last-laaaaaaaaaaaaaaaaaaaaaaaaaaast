@@ -4,20 +4,19 @@ const { logActivity } = require('./logsController');
 // الحصول على معلومات الموظف الحالي
 const getEmployeeProfile = async (req, res) => {
     try {
-        const userID = req.user.UserID || req.user.EmployeeID;
+        const employeeId = req.user.EmployeeID;
 
-        const [users] = await pool.execute(
-            `SELECT u.UserID, u.FullName, u.Username, u.Email, u.Phone, 
-                    u.NationalID, u.EmployeeNumber, u.RoleID, u.DepartmentID, 
-                    u.CreatedAt, r.RoleName, d.DepartmentName
-             FROM users u 
-             JOIN roles r ON u.RoleID = r.RoleID 
-             LEFT JOIN departments d ON u.DepartmentID = d.DepartmentID
-             WHERE u.UserID = ?`,
-            [userID]
+        const [employees] = await pool.execute(
+            `SELECT e.EmployeeID, e.FullName, e.Username, e.Email, e.PhoneNumber, 
+                    e.Specialty, e.JoinDate, r.RoleName, d.DepartmentName
+             FROM Employees e 
+             JOIN Roles r ON e.RoleID = r.RoleID 
+             LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
+             WHERE e.EmployeeID = ?`,
+            [employeeId]
         );
 
-        if (users.length === 0) {
+        if (employees.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'الموظف غير موجود'
@@ -26,7 +25,7 @@ const getEmployeeProfile = async (req, res) => {
 
         res.json({
             success: true,
-            data: users[0]
+            data: employees[0]
         });
 
     } catch (error) {
@@ -46,67 +45,79 @@ const createComplaint = async (req, res) => {
         const {
             title,
             description,
-            subtypeID,
-            departmentID,
+            category,
             priority,
-            source,
-            patientID,
             attachments
         } = req.body;
 
-        const userID = req.user.UserID || req.user.EmployeeID;
+        const employeeId = req.user.EmployeeID;
 
         // التحقق من البيانات المطلوبة
-        if (!title || !description) {
+        if (!title || !description || !category) {
             return res.status(400).json({
                 success: false,
-                message: 'العنوان والوصف مطلوبان'
+                message: 'العنوان والوصف والفئة مطلوبة'
             });
         }
 
-        // إنشاء رقم الشكوى
-        const complaintNumber = `C${Date.now()}`;
-
-        // إدراج الشكوى الجديدة
-        const [result] = await pool.execute(
-            `INSERT INTO complaints (ComplaintNumber, Title, Description, SubtypeID, 
-                                   DepartmentID, Priority, Source, PatientID, CreatedBy, Status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')`,
-            [complaintNumber, title, description, subtypeID, departmentID, 
-             priority || 'normal', source || 'in_person', patientID, userID]
+        // جلب قسم الموظف
+        const [employeeData] = await pool.execute(
+            'SELECT DepartmentID FROM Employees WHERE EmployeeID = ?',
+            [employeeId]
         );
 
-        const complaintID = result.insertId;
+        const departmentId = employeeData[0].DepartmentID;
 
-        // إضافة المرفقات إن وجدت
-        if (attachments && attachments.length > 0) {
-            for (const attachment of attachments) {
-                await pool.execute(
-                    `INSERT INTO complaint_attachments (ComplaintID, FileURL, FileName, 
-                                                      MimeType, SizeBytes, UploadedBy) 
-                     VALUES (?, ?, ?, ?, ?, ?)`,
-                    [complaintID, attachment.url, attachment.filename, 
-                     attachment.mimetype, attachment.size, userID]
-                );
+        // إنشاء الشكوى
+        const [result] = await pool.execute(
+            `INSERT INTO Complaints (Title, Description, Category, Priority, Status, 
+                                   EmployeeID, DepartmentID, CreatedAt, UpdatedAt) 
+             VALUES (?, ?, ?, ?, 'مفتوحة/جديدة', ?, ?, NOW(), NOW())`,
+            [title, description, category, priority || 'متوسط', employeeId, departmentId]
+        );
+
+        const complaintId = result.insertId;
+
+        // الحصول على اسم القسم للإشعار
+        let departmentName = 'غير محدد';
+        try {
+            const [deptResult] = await pool.execute(
+                'SELECT DepartmentName FROM Departments WHERE DepartmentID = ?',
+                [departmentId]
+            );
+            if (deptResult.length > 0) {
+                departmentName = deptResult[0].DepartmentName;
             }
+        } catch (deptError) {
+            console.log('لا يمكن الحصول على اسم القسم:', deptError.message);
+        }
+
+        // إرسال إشعار للسوبر أدمن عن الشكوى الجديدة
+        try {
+            await notifyNewComplaint(complaintId, title, departmentName);
+        } catch (notifError) {
+            console.log('خطأ في إرسال إشعار الشكوى الجديدة:', notifError.message);
         }
 
         // تسجيل النشاط
-        await logActivity(userID, userID, 'COMPLAINT_CREATED', {
-            complaintID,
-            complaintNumber,
-            title
-        });
-
-        // إرسال إشعار للمسؤولين
-        await notifyNewComplaint(complaintID, userID);
+        await logActivity(
+            employeeId,
+            req.user.Username,
+            'create_complaint',
+            `تم إنشاء شكوى جديدة: ${title}`,
+            req.ip,
+            req.get('User-Agent'),
+            complaintId,
+            'complaint'
+        );
 
         res.status(201).json({
             success: true,
             message: 'تم إنشاء الشكوى بنجاح',
             data: {
-                ComplaintID: complaintID,
-                ComplaintNumber: complaintNumber
+                complaintId,
+                title,
+                status: 'مفتوحة/جديدة'
             }
         });
 
@@ -122,65 +133,63 @@ const createComplaint = async (req, res) => {
 // جلب شكاوى الموظف
 const getEmployeeComplaints = async (req, res) => {
     try {
-        const userID = req.user.UserID || req.user.EmployeeID;
-        const { status, limit = 50, offset = 0 } = req.query;
+        const employeeId = req.user.EmployeeID;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+        const status = req.query.status;
+        const category = req.query.category;
 
-        let whereClause = 'WHERE (c.CreatedBy = ? OR ca.AssignedToUserID = ?)';
-        let queryParams = [userID, userID];
+        let whereConditions = ['(c.EmployeeID = ? OR c.AssignedTo = ?)'];
+        let queryParams = [employeeId, employeeId];
 
         if (status) {
-            whereClause += ' AND c.Status = ?';
+            whereConditions.push('c.Status = ?');
             queryParams.push(status);
         }
 
-        const query = `
-            SELECT DISTINCT c.ComplaintID, c.ComplaintNumber, c.Title, c.Description,
-                   c.Status, c.Priority, c.Source, c.CreatedAt, c.UpdatedAt, c.ClosedAt,
-                   d.DepartmentName, st.SubtypeName, cr.ReasonName,
-                   p.FullName as PatientFullName, p.NationalID as PatientNationalID,
-                   creator.FullName as CreatedByName,
-                   ca.AssignedToUserID, assignee.FullName as AssignedToName
-            FROM complaints c
-            LEFT JOIN departments d ON c.DepartmentID = d.DepartmentID
-            LEFT JOIN complaint_subtypes st ON c.SubtypeID = st.SubtypeID
-            LEFT JOIN complaint_reasons cr ON st.ReasonID = cr.ReasonID
-            LEFT JOIN patients p ON c.PatientID = p.PatientID
-            LEFT JOIN users creator ON c.CreatedBy = creator.UserID
-            LEFT JOIN (
-                SELECT ca1.ComplaintID, ca1.AssignedToUserID,
-                       ROW_NUMBER() OVER (PARTITION BY ca1.ComplaintID ORDER BY ca1.CreatedAt DESC) as rn
-                FROM complaint_assignments ca1
-            ) ca_ranked ON c.ComplaintID = ca_ranked.ComplaintID AND ca_ranked.rn = 1
-            LEFT JOIN complaint_assignments ca ON c.ComplaintID = ca.ComplaintID AND ca.AssignmentID = (
-                SELECT MAX(AssignmentID) FROM complaint_assignments WHERE ComplaintID = c.ComplaintID
-            )
-            LEFT JOIN users assignee ON ca.AssignedToUserID = assignee.UserID
-            ${whereClause}
-            ORDER BY c.CreatedAt DESC
-            LIMIT ? OFFSET ?
-        `;
-
-        queryParams.push(parseInt(limit), parseInt(offset));
-
-        const [complaints] = await pool.execute(query, queryParams);
-
-        // جلب المرفقات لكل شكوى
-        for (let complaint of complaints) {
-            const [attachments] = await pool.execute(
-                `SELECT AttachmentID, FileURL, FileName, MimeType, SizeBytes, CreatedAt
-                 FROM complaint_attachments WHERE ComplaintID = ?`,
-                [complaint.ComplaintID]
-            );
-            complaint.attachments = attachments;
+        if (category) {
+            whereConditions.push('c.Category = ?');
+            queryParams.push(category);
         }
+
+        const whereClause = whereConditions.join(' AND ');
+
+        // جلب عدد الشكاوى
+        const [countResult] = await pool.execute(
+            `SELECT COUNT(*) as total 
+             FROM Complaints c 
+             WHERE ${whereClause}`,
+            queryParams
+        );
+
+        const totalComplaints = countResult[0].total;
+
+        // جلب الشكاوى
+        const [complaints] = await pool.execute(
+            `SELECT c.ComplaintID, c.Title, c.Description, c.Category, c.Priority, 
+                    c.Status, c.CreatedAt, c.UpdatedAt, c.AssignedTo,
+                    e.FullName as EmployeeName, d.DepartmentName,
+                    (SELECT COUNT(*) FROM Responses r WHERE r.ComplaintID = c.ComplaintID) as ResponseCount
+             FROM Complaints c
+             LEFT JOIN Employees e ON c.EmployeeID = e.EmployeeID
+             LEFT JOIN Departments d ON c.DepartmentID = d.DepartmentID
+             WHERE ${whereClause}
+             ORDER BY c.CreatedAt DESC
+             LIMIT ? OFFSET ?`,
+            [...queryParams, limit, offset]
+        );
 
         res.json({
             success: true,
-            data: complaints,
-            pagination: {
-                limit: parseInt(limit),
-                offset: parseInt(offset),
-                total: complaints.length
+            data: {
+                complaints,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(totalComplaints / limit),
+                    totalComplaints,
+                    complaintsPerPage: limit
+                }
             }
         });
 
@@ -193,98 +202,46 @@ const getEmployeeComplaints = async (req, res) => {
     }
 };
 
-// جلب تفاصيل شكوى محددة
+// جلب تفاصيل شكوى واحدة
 const getComplaintDetails = async (req, res) => {
     try {
-        const { complaintID } = req.params;
-        const userID = req.user.UserID || req.user.EmployeeID;
+        const { complaintId } = req.params;
+        const employeeId = req.user.EmployeeID;
 
-        // التحقق من صلاحية الوصول للشكوى
-        const [accessCheck] = await pool.execute(
-            `SELECT c.ComplaintID FROM complaints c
-             LEFT JOIN complaint_assignments ca ON c.ComplaintID = ca.ComplaintID
-             WHERE c.ComplaintID = ? AND (c.CreatedBy = ? OR ca.AssignedToUserID = ?)`,
-            [complaintID, userID, userID]
-        );
-
-        if (accessCheck.length === 0) {
-            return res.status(403).json({
-                success: false,
-                message: 'غير مصرح لك بالوصول لهذه الشكوى'
-            });
-        }
-
-        // جلب تفاصيل الشكوى
+        // التحقق من ملكية الشكوى
         const [complaints] = await pool.execute(
-            `SELECT c.*, d.DepartmentName, st.SubtypeName, cr.ReasonName,
-                    p.FullName as PatientFullName, p.NationalID as PatientNationalID,
-                    p.Phone as PatientPhone, p.Email as PatientEmail,
-                    creator.FullName as CreatedByName
-             FROM complaints c
-             LEFT JOIN departments d ON c.DepartmentID = d.DepartmentID
-             LEFT JOIN complaint_subtypes st ON c.SubtypeID = st.SubtypeID
-             LEFT JOIN complaint_reasons cr ON st.ReasonID = cr.ReasonID
-             LEFT JOIN patients p ON c.PatientID = p.PatientID
-             LEFT JOIN users creator ON c.CreatedBy = creator.UserID
-             WHERE c.ComplaintID = ?`,
-            [complaintID]
+            `SELECT c.*, e.FullName as EmployeeName, d.DepartmentName,
+                    a.FullName as AssignedToName
+             FROM Complaints c
+             LEFT JOIN Employees e ON c.EmployeeID = e.EmployeeID
+             LEFT JOIN Departments d ON c.DepartmentID = d.DepartmentID
+             LEFT JOIN Employees a ON c.AssignedTo = a.EmployeeID
+             WHERE c.ComplaintID = ? AND (c.EmployeeID = ? OR c.AssignedTo = ?)`,
+            [complaintId, employeeId, employeeId]
         );
 
         if (complaints.length === 0) {
             return res.status(404).json({
                 success: false,
-                message: 'الشكوى غير موجودة'
+                message: 'الشكوى غير موجودة أو ليس لديك صلاحية للوصول إليها'
             });
         }
 
-        const complaint = complaints[0];
-
-        // جلب المرفقات
-        const [attachments] = await pool.execute(
-            `SELECT AttachmentID, FileURL, FileName, MimeType, SizeBytes, CreatedAt
-             FROM complaint_attachments WHERE ComplaintID = ?`,
-            [complaintID]
-        );
-
         // جلب الردود
-        const [replies] = await pool.execute(
-            `SELECT cr.*, u.FullName as AuthorName
-             FROM complaint_replies cr
-             LEFT JOIN users u ON cr.AuthorUserID = u.UserID
-             WHERE cr.ComplaintID = ?
-             ORDER BY cr.CreatedAt ASC`,
-            [complaintID]
-        );
-
-        // جلب تاريخ التغييرات
-        const [history] = await pool.execute(
-            `SELECT ch.*, u.FullName as ActorName
-             FROM complaint_history ch
-             LEFT JOIN users u ON ch.ActorUserID = u.UserID
-             WHERE ch.ComplaintID = ?
-             ORDER BY ch.CreatedAt DESC`,
-            [complaintID]
-        );
-
-        // جلب التكليفات الحالية
-        const [assignments] = await pool.execute(
-            `SELECT ca.*, u.FullName as AssignedToName, assigner.FullName as AssignedByName
-             FROM complaint_assignments ca
-             LEFT JOIN users u ON ca.AssignedToUserID = u.UserID
-             LEFT JOIN users assigner ON ca.AssignedByUserID = assigner.UserID
-             WHERE ca.ComplaintID = ?
-             ORDER BY ca.CreatedAt DESC`,
-            [complaintID]
+        const [responses] = await pool.execute(
+            `SELECT r.*, e.FullName as EmployeeName
+             FROM Responses r
+             LEFT JOIN Employees e ON r.EmployeeID = e.EmployeeID
+             WHERE r.ComplaintID = ?
+             ORDER BY r.CreatedAt ASC`,
+            [complaintId]
         );
 
         res.json({
             success: true,
             data: {
-                ...complaint,
-                attachments,
-                replies,
-                history,
-                assignments
+                complaint: complaints[0],
+                responses
             }
         });
 
@@ -297,65 +254,79 @@ const getComplaintDetails = async (req, res) => {
     }
 };
 
-// إضافة رد على الشكوى
-const addComplaintReply = async (req, res) => {
-    try {
-        const { complaintID } = req.params;
-        const { body, attachmentURL } = req.body;
-        const userID = req.user.UserID || req.user.EmployeeID;
+const { notifyNewResponse } = require('../utils/notificationUtils');
 
-        if (!body) {
+// إضافة رد على شكوى
+const addResponse = async (req, res) => {
+    try {
+        const { complaintId } = req.params;
+        const { content } = req.body;
+        const employeeId = req.user.EmployeeID;
+
+        if (!content) {
             return res.status(400).json({
                 success: false,
-                message: 'نص الرد مطلوب'
+                message: 'محتوى الرد مطلوب'
             });
         }
 
-        // التحقق من صلاحية الوصول للشكوى
-        const [accessCheck] = await pool.execute(
-            `SELECT c.ComplaintID FROM complaints c
-             LEFT JOIN complaint_assignments ca ON c.ComplaintID = ca.ComplaintID
-             WHERE c.ComplaintID = ? AND (c.CreatedBy = ? OR ca.AssignedToUserID = ?)`,
-            [complaintID, userID, userID]
+        // التحقق من ملكية الشكوى
+        const [complaints] = await pool.execute(
+            'SELECT * FROM Complaints WHERE ComplaintID = ? AND (EmployeeID = ? OR AssignedTo = ?)',
+            [complaintId, employeeId, employeeId]
         );
 
-        if (accessCheck.length === 0) {
+        if (complaints.length === 0) {
             return res.status(403).json({
                 success: false,
-                message: 'غير مصرح لك بالرد على هذه الشكوى'
+                message: 'ليس لديك صلاحية للرد على هذه الشكوى'
             });
         }
 
         // إضافة الرد
         const [result] = await pool.execute(
-            `INSERT INTO complaint_replies (ComplaintID, AuthorUserID, Body, AttachmentURL) 
-             VALUES (?, ?, ?, ?)`,
-            [complaintID, userID, body, attachmentURL]
+            `INSERT INTO Responses (ComplaintID, EmployeeID, Content, CreatedAt) 
+             VALUES (?, ?, ?, NOW())`,
+            [complaintId, employeeId, content]
         );
 
-        // تحديث حالة الشكوى إلى "تم الرد" إذا لم تكن مغلقة
+        // تحديث وقت آخر تحديث للشكوى
         await pool.execute(
-            `UPDATE complaints SET Status = 'responded', UpdatedAt = CURRENT_TIMESTAMP 
-             WHERE ComplaintID = ? AND Status != 'closed'`,
-            [complaintID]
+            'UPDATE Complaints SET UpdatedAt = NOW() WHERE ComplaintID = ?',
+            [complaintId]
         );
 
         // تسجيل النشاط
-        await logActivity(userID, null, 'COMPLAINT_REPLY_ADDED', {
-            complaintID,
-            replyID: result.insertId
-        });
+        await logActivity(
+            employeeId,
+            req.user.Username,
+            'add_response',
+            `تم إضافة رد على الشكوى رقم ${complaintId}`,
+            req.ip,
+            req.get('User-Agent'),
+            complaintId,
+            'complaint'
+        );
+
+        // إرسال إشعار للسوبر أدمن عن الرد الجديد
+        try {
+            await notifyNewResponse(complaintId, 'رد داخلي', req.user.FullName || req.user.Username);
+        } catch (notifError) {
+            console.log('خطأ في إرسال إشعار الرد الجديد:', notifError.message);
+        }
 
         res.status(201).json({
             success: true,
             message: 'تم إضافة الرد بنجاح',
             data: {
-                ReplyID: result.insertId
+                responseId: result.insertId,
+                content,
+                createdAt: new Date()
             }
         });
 
     } catch (error) {
-        console.error('خطأ في إضافة رد الشكوى:', error);
+        console.error('خطأ في إضافة الرد:', error);
         res.status(500).json({
             success: false,
             message: 'حدث خطأ في الخادم'
@@ -363,68 +334,78 @@ const addComplaintReply = async (req, res) => {
     }
 };
 
-// تحديث حالة الشكوى
+const { notifyComplaintUpdate } = require('../utils/notificationUtils');
+
+// تغيير حالة الشكوى
 const updateComplaintStatus = async (req, res) => {
     try {
-        const { complaintID } = req.params;
+        const { complaintId } = req.params;
         const { status } = req.body;
-        const userID = req.user.UserID || req.user.EmployeeID;
+        const employeeId = req.user.EmployeeID;
 
-        if (!status || !['open', 'in_progress', 'responded', 'closed'].includes(status)) {
+        if (!status) {
             return res.status(400).json({
                 success: false,
-                message: 'حالة غير صحيحة'
+                message: 'الحالة الجديدة مطلوبة'
             });
         }
 
-        // التحقق من صلاحية الوصول للشكوى
-        const [accessCheck] = await pool.execute(
-            `SELECT c.ComplaintID, c.Status FROM complaints c
-             LEFT JOIN complaint_assignments ca ON c.ComplaintID = ca.ComplaintID
-             WHERE c.ComplaintID = ? AND (c.CreatedBy = ? OR ca.AssignedToUserID = ?)`,
-            [complaintID, userID, userID]
+        // الحالات المسموح بها للموظف
+        const allowedStatuses = ['مفتوحة/جديدة', 'قيد المعالجة', 'معلقة', 'مكتملة'];
+        
+        if (!allowedStatuses.includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'الحالة غير مسموح بها'
+            });
+        }
+
+        // التحقق من ملكية الشكوى
+        const [complaints] = await pool.execute(
+            'SELECT * FROM Complaints WHERE ComplaintID = ? AND (EmployeeID = ? OR AssignedTo = ?)',
+            [complaintId, employeeId, employeeId]
         );
 
-        if (accessCheck.length === 0) {
+        if (complaints.length === 0) {
             return res.status(403).json({
                 success: false,
-                message: 'غير مصرح لك بتعديل هذه الشكوى'
+                message: 'ليس لديك صلاحية لتغيير حالة هذه الشكوى'
             });
         }
 
-        const oldStatus = accessCheck[0].Status;
-
         // تحديث الحالة
-        const updateData = [status, userID];
-        let updateQuery = `UPDATE complaints SET Status = ?, UpdatedAt = CURRENT_TIMESTAMP`;
-
-        if (status === 'closed') {
-            updateQuery += `, ClosedAt = CURRENT_TIMESTAMP`;
-        }
-
-        updateQuery += ` WHERE ComplaintID = ?`;
-        updateData.push(complaintID);
-
-        await pool.execute(updateQuery, updateData);
-
-        // إضافة سجل في تاريخ التغييرات
         await pool.execute(
-            `INSERT INTO complaint_history (ComplaintID, ActorUserID, PrevStatus, NewStatus, 
-                                          FieldChanged, OldValue, NewValue) 
-             VALUES (?, ?, ?, ?, 'Status', ?, ?)`,
-            [complaintID, userID, oldStatus, status, oldStatus, status]
+            'UPDATE Complaints SET Status = ?, UpdatedAt = NOW() WHERE ComplaintID = ?',
+            [status, complaintId]
         );
 
         // تسجيل النشاط
-        await logActivity(userID, null, 'COMPLAINT_STATUS_UPDATED', {
-            complaintID,
-            oldStatus,
-            newStatus: status
-        });
+        await logActivity(
+            employeeId,
+            req.user.Username,
+            'update_status',
+            `تم تغيير حالة الشكوى رقم ${complaintId} إلى: ${status}`,
+            req.ip,
+            req.get('User-Agent'),
+            complaintId,
+            'complaint'
+        );
+
+        // إرسال إشعار للسوبر أدمن عن تحديث الشكوى
+        try {
+            await notifyComplaintUpdate(complaintId, `تحديث حالة الشكوى إلى "${status}"`, req.user.FullName || req.user.Username);
+        } catch (notifError) {
+            console.log('خطأ في إرسال إشعار تحديث الشكوى:', notifError.message);
+        }
 
         res.json({
             success: true,
-            message: 'تم تحديث حالة الشكوى بنجاح'
+            message: 'تم تحديث حالة الشكوى بنجاح',
+            data: {
+                complaintId,
+                status,
+                updatedAt: new Date()
+            }
         });
 
     } catch (error) {
@@ -436,59 +417,46 @@ const updateComplaintStatus = async (req, res) => {
     }
 };
 
-// جلب الإحصائيات الشخصية للموظف
-const getEmployeeStats = async (req, res) => {
+// جلب الإشعارات
+const getNotifications = async (req, res) => {
     try {
-        const userID = req.user.UserID || req.user.EmployeeID;
+        const employeeId = req.user.EmployeeID;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
 
-        // إحصائيات الشكاوى المُنشأة
-        const [createdStats] = await pool.execute(
-            `SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN Status = 'open' THEN 1 ELSE 0 END) as open,
-                SUM(CASE WHEN Status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
-                SUM(CASE WHEN Status = 'responded' THEN 1 ELSE 0 END) as responded,
-                SUM(CASE WHEN Status = 'closed' THEN 1 ELSE 0 END) as closed
-             FROM complaints WHERE CreatedBy = ?`,
-            [userID]
+        // جلب الإشعارات الخاصة بالموظف
+        const [notifications] = await pool.execute(
+            `SELECT n.*, c.Title as ComplaintTitle
+             FROM Notifications n
+             LEFT JOIN Complaints c ON n.ComplaintID = c.ComplaintID
+             WHERE n.EmployeeID = ?
+             ORDER BY n.CreatedAt DESC
+             LIMIT ? OFFSET ?`,
+            [employeeId, limit, offset]
         );
 
-        // إحصائيات الشكاوى المُكلف بها
-        const [assignedStats] = await pool.execute(
-            `SELECT 
-                COUNT(DISTINCT c.ComplaintID) as total,
-                SUM(CASE WHEN c.Status = 'open' THEN 1 ELSE 0 END) as open,
-                SUM(CASE WHEN c.Status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
-                SUM(CASE WHEN c.Status = 'responded' THEN 1 ELSE 0 END) as responded,
-                SUM(CASE WHEN c.Status = 'closed' THEN 1 ELSE 0 END) as closed
-             FROM complaints c
-             JOIN complaint_assignments ca ON c.ComplaintID = ca.ComplaintID
-             WHERE ca.AssignedToUserID = ?`,
-            [userID]
-        );
-
-        // الشكاوى الحديثة
-        const [recentComplaints] = await pool.execute(
-            `SELECT c.ComplaintID, c.ComplaintNumber, c.Title, c.Status, c.Priority, c.CreatedAt
-             FROM complaints c
-             LEFT JOIN complaint_assignments ca ON c.ComplaintID = ca.ComplaintID
-             WHERE (c.CreatedBy = ? OR ca.AssignedToUserID = ?)
-             ORDER BY c.CreatedAt DESC
-             LIMIT 5`,
-            [userID, userID]
+        // جلب عدد الإشعارات غير المقروءة
+        const [unreadCount] = await pool.execute(
+            'SELECT COUNT(*) as count FROM Notifications WHERE EmployeeID = ? AND IsRead = 0',
+            [employeeId]
         );
 
         res.json({
             success: true,
             data: {
-                created: createdStats[0],
-                assigned: assignedStats[0],
-                recentComplaints
+                notifications,
+                unreadCount: unreadCount[0].count,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(notifications.length / limit),
+                    notificationsPerPage: limit
+                }
             }
         });
 
     } catch (error) {
-        console.error('خطأ في جلب إحصائيات الموظف:', error);
+        console.error('خطأ في جلب الإشعارات:', error);
         res.status(500).json({
             success: false,
             message: 'حدث خطأ في الخادم'
@@ -496,68 +464,32 @@ const getEmployeeStats = async (req, res) => {
     }
 };
 
-// جلب الأقسام
-const getDepartments = async (req, res) => {
+// تحديث حالة الإشعار كمقروء
+const markNotificationAsRead = async (req, res) => {
     try {
-        const [departments] = await pool.execute(
-            'SELECT DepartmentID, DepartmentName FROM departments ORDER BY DepartmentName'
+        const { notificationId } = req.params;
+        const employeeId = req.user.EmployeeID;
+
+        // تحديث حالة الإشعار
+        const [result] = await pool.execute(
+            'UPDATE Notifications SET IsRead = 1 WHERE NotificationID = ? AND EmployeeID = ?',
+            [notificationId, employeeId]
         );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'الإشعار غير موجود أو ليس لديك صلاحية للوصول إليه'
+            });
+        }
 
         res.json({
             success: true,
-            data: departments
+            message: 'تم تحديث حالة الإشعار بنجاح'
         });
 
     } catch (error) {
-        console.error('خطأ في جلب الأقسام:', error);
-        res.status(500).json({
-            success: false,
-            message: 'حدث خطأ في الخادم'
-        });
-    }
-};
-
-// جلب أسباب الشكاوى حسب القسم
-const getComplaintReasons = async (req, res) => {
-    try {
-        const { departmentID } = req.params;
-
-        const [reasons] = await pool.execute(
-            'SELECT ReasonID, ReasonName FROM complaint_reasons WHERE DepartmentID = ? ORDER BY ReasonName',
-            [departmentID]
-        );
-
-        res.json({
-            success: true,
-            data: reasons
-        });
-
-    } catch (error) {
-        console.error('خطأ في جلب أسباب الشكاوى:', error);
-        res.status(500).json({
-            success: false,
-            message: 'حدث خطأ في الخادم'
-        });
-    }
-};
-
-// جلب الأنواع الفرعية حسب السبب
-const getComplaintSubtypes = async (req, res) => {
-    try {
-        const { reasonID } = req.params;
-
-        const [subtypes] = await pool.execute(
-            'SELECT SubtypeID, SubtypeName FROM complaint_subtypes WHERE ReasonID = ? ORDER BY SubtypeName',
-            [reasonID]
-        );
-
-        res.json({
-            success: true,
-            data: subtypes
-        });
-
-    } catch (error) {
-        console.error('خطأ في جلب الأنواع الفرعية:', error);
+        console.error('خطأ في تحديث حالة الإشعار:', error);
         res.status(500).json({
             success: false,
             message: 'حدث خطأ في الخادم'
@@ -570,10 +502,8 @@ module.exports = {
     createComplaint,
     getEmployeeComplaints,
     getComplaintDetails,
-    addComplaintReply,
+    addResponse,
     updateComplaintStatus,
-    getEmployeeStats,
-    getDepartments,
-    getComplaintReasons,
-    getComplaintSubtypes
+    getNotifications,
+    markNotificationAsRead
 };

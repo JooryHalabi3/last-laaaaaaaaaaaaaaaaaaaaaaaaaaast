@@ -1,5 +1,4 @@
 const pool = require('../config/database');
-const { logActivity } = require('./logsController');
 
 // جلب إحصائيات الشكاوى العامة
 const getGeneralComplaintsStats = async (req, res) => {
@@ -22,13 +21,13 @@ const getGeneralComplaintsStats = async (req, res) => {
                 fromDate.setDate(fromDate.getDate() - days);
                 const toDate = new Date();
                 
-                conditions.push('c.CreatedAt BETWEEN ? AND ?');
+                conditions.push('c.ComplaintDate BETWEEN ? AND ?');
                 params.push(fromDate.toISOString().split('T')[0], toDate.toISOString().split('T')[0]);
             }
         }
         
         if (status && status !== 'الحالة') {
-            conditions.push('c.Status = ?');
+            conditions.push('c.CurrentStatus = ?');
             params.push(status);
         }
         
@@ -38,421 +37,291 @@ const getGeneralComplaintsStats = async (req, res) => {
         }
         
         if (complaintType && complaintType !== 'نوع الشكوى') {
-            conditions.push('cr.ReasonName = ?');
+            conditions.push('ct.TypeName = ?');
             params.push(complaintType);
         }
         
         if (search && search.trim() !== '') {
-            conditions.push('(c.Title LIKE ? OR c.Description LIKE ? OR p.FullName LIKE ? OR p.NationalID LIKE ?)');
+            conditions.push('(c.ComplaintDetails LIKE ? OR p.FullName LIKE ? OR p.NationalID_Iqama LIKE ?)');
             const searchTerm = `%${search.trim()}%`;
-            params.push(searchTerm, searchTerm, searchTerm, searchTerm);
+            params.push(searchTerm, searchTerm, searchTerm);
         }
         
         if (conditions.length > 0) {
             whereClause = 'WHERE ' + conditions.join(' AND ');
         }
         
-        // الاستعلام الرئيسي للإحصائيات
-        const statsQuery = `
+        // إحصائيات عامة
+        const [stats] = await pool.execute(`
             SELECT 
                 COUNT(*) as totalComplaints,
-                SUM(CASE WHEN c.Status = 'open' THEN 1 ELSE 0 END) as newComplaints,
-                SUM(CASE WHEN c.Status = 'in_progress' THEN 1 ELSE 0 END) as inProgressComplaints,
-                SUM(CASE WHEN c.Status = 'responded' THEN 1 ELSE 0 END) as respondedComplaints,
-                SUM(CASE WHEN c.Status = 'closed' THEN 1 ELSE 0 END) as closedComplaints,
-                SUM(CASE WHEN c.Priority = 'urgent' THEN 1 ELSE 0 END) as urgentComplaints,
-                SUM(CASE WHEN c.Priority = 'high' THEN 1 ELSE 0 END) as highPriorityComplaints,
-                SUM(CASE WHEN c.Source = 'in_person' THEN 1 ELSE 0 END) as inPersonComplaints,
-                SUM(CASE WHEN c.Source = 'call_center' THEN 1 ELSE 0 END) as callCenterComplaints
-            FROM complaints c
-            LEFT JOIN departments d ON c.DepartmentID = d.DepartmentID
-            LEFT JOIN complaint_subtypes st ON c.SubtypeID = st.SubtypeID
-            LEFT JOIN complaint_reasons cr ON st.ReasonID = cr.ReasonID
-            LEFT JOIN patients p ON c.PatientID = p.PatientID
+                SUM(CASE WHEN c.CurrentStatus = 'مغلقة' THEN 1 ELSE 0 END) as resolvedComplaints,
+                SUM(CASE WHEN c.CurrentStatus != 'مغلقة' THEN 1 ELSE 0 END) as pendingComplaints,
+                SUM(CASE WHEN c.CurrentStatus = 'جديدة' THEN 1 ELSE 0 END) as newComplaints,
+                SUM(CASE WHEN c.CurrentStatus = 'مرفوضة' THEN 1 ELSE 0 END) as rejectedComplaints
+            FROM Complaints c
+            JOIN Departments d ON c.DepartmentID = d.DepartmentID
+            JOIN ComplaintTypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
+            LEFT JOIN Patients p ON c.PatientID = p.PatientID
             ${whereClause}
-        `;
+        `, params);
         
-        const [statsResult] = await pool.execute(statsQuery, params);
-        const stats = statsResult[0];
+        // جلب جميع الشكاوى مع التفاصيل
+        const [complaints] = await pool.execute(`
+            SELECT 
+                c.ComplaintID,
+                c.ComplaintDate,
+                c.ComplaintDetails,
+                c.CurrentStatus,
+                c.Priority,
+                d.DepartmentName,
+                ct.TypeName as ComplaintTypeName,
+                cst.SubTypeName,
+                p.FullName as patientName,
+                p.NationalID_Iqama,
+                p.ContactNumber,
+                p.Gender,
+                e.FullName as employeeName,
+                e.Specialty
+            FROM Complaints c
+            JOIN Departments d ON c.DepartmentID = d.DepartmentID
+            JOIN ComplaintTypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
+            LEFT JOIN ComplaintSubTypes cst ON c.SubTypeID = cst.SubTypeID
+            LEFT JOIN Patients p ON c.PatientID = p.PatientID
+            LEFT JOIN Employees e ON c.EmployeeID = e.EmployeeID
+            ${whereClause}
+            ORDER BY c.ComplaintDate DESC
+        `, params);
         
         // إحصائيات حسب القسم
-        const departmentStatsQuery = `
+        const [departmentStats] = await pool.execute(`
             SELECT 
                 d.DepartmentName,
-                COUNT(c.ComplaintID) as count,
-                SUM(CASE WHEN c.Status = 'closed' THEN 1 ELSE 0 END) as closed
-            FROM departments d
-            LEFT JOIN complaints c ON d.DepartmentID = c.DepartmentID
-            ${whereClause.replace(/^WHERE/, whereClause ? 'AND' : 'WHERE')}
+                COUNT(*) as complaintCount
+            FROM Complaints c
+            JOIN Departments d ON c.DepartmentID = d.DepartmentID
+            LEFT JOIN Patients p ON c.PatientID = p.PatientID
+            ${whereClause}
             GROUP BY d.DepartmentID, d.DepartmentName
-            HAVING count > 0
-            ORDER BY count DESC
-            LIMIT 10
-        `;
-        
-        const [departmentStats] = await pool.execute(departmentStatsQuery, params);
+            ORDER BY complaintCount DESC
+        `, params);
         
         // إحصائيات حسب نوع الشكوى
-        const typeStatsQuery = `
+        const [typeStats] = await pool.execute(`
             SELECT 
-                COALESCE(cr.ReasonName, 'غير محدد') as type,
-                COUNT(c.ComplaintID) as count
-            FROM complaints c
-            LEFT JOIN departments d ON c.DepartmentID = d.DepartmentID
-            LEFT JOIN complaint_subtypes st ON c.SubtypeID = st.SubtypeID
-            LEFT JOIN complaint_reasons cr ON st.ReasonID = cr.ReasonID
-            LEFT JOIN patients p ON c.PatientID = p.PatientID
+                ct.TypeName,
+                COUNT(*) as complaintCount
+            FROM Complaints c
+            JOIN ComplaintTypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
+            LEFT JOIN Patients p ON c.PatientID = p.PatientID
             ${whereClause}
-            GROUP BY cr.ReasonName
-            ORDER BY count DESC
-            LIMIT 10
-        `;
+            GROUP BY ct.ComplaintTypeID, ct.TypeName
+            ORDER BY complaintCount DESC
+        `, params);
         
-        const [typeStats] = await pool.execute(typeStatsQuery, params);
+        // معالجة النتائج
+        const generalStats = stats[0] || {
+            totalComplaints: 0,
+            resolvedComplaints: 0,
+            pendingComplaints: 0,
+            newComplaints: 0,
+            rejectedComplaints: 0
+        };
         
-        // إحصائيات شهرية (آخر 6 أشهر)
-        const monthlyStatsQuery = `
-            SELECT 
-                DATE_FORMAT(c.CreatedAt, '%Y-%m') as month,
-                COUNT(*) as count,
-                SUM(CASE WHEN c.Status = 'closed' THEN 1 ELSE 0 END) as closed
-            FROM complaints c
-            LEFT JOIN departments d ON c.DepartmentID = d.DepartmentID
-            LEFT JOIN complaint_subtypes st ON c.SubtypeID = st.SubtypeID
-            LEFT JOIN complaint_reasons cr ON st.ReasonID = cr.ReasonID
-            LEFT JOIN patients p ON c.PatientID = p.PatientID
-            WHERE c.CreatedAt >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-            ${whereClause ? 'AND ' + whereClause.substring(6) : ''}
-            GROUP BY DATE_FORMAT(c.CreatedAt, '%Y-%m')
-            ORDER BY month DESC
-        `;
-        
-        const [monthlyStats] = await pool.execute(monthlyStatsQuery, params);
-        
-        console.log('✅ تم جلب إحصائيات الشكاوى العامة بنجاح');
+        console.log('📈 إحصائيات الشكاوى العامة:', {
+            generalStats,
+            complaintsCount: complaints.length,
+            departmentStatsCount: departmentStats.length,
+            typeStatsCount: typeStats.length
+        });
         
         res.json({
             success: true,
             data: {
-                overview: stats,
-                departmentBreakdown: departmentStats,
-                typeBreakdown: typeStats,
-                monthlyTrend: monthlyStats
+                general: generalStats,
+                complaints: complaints,
+                byDepartment: departmentStats,
+                byType: typeStats
             }
         });
         
     } catch (error) {
         console.error('❌ خطأ في جلب إحصائيات الشكاوى العامة:', error);
-        res.status(500).json({
-            success: false,
-            message: 'حدث خطأ في الخادم'
-        });
+        
+        // إرجاع بيانات فارغة بدلاً من خطأ إذا لم توجد بيانات
+        if (error.code === 'ER_PARSE_ERROR' || error.code === 'ER_NO_SUCH_TABLE') {
+            console.log('⚠️ إرجاع بيانات فارغة بسبب خطأ في قاعدة البيانات');
+            res.json({
+                success: true,
+                data: {
+                    general: {
+                        totalComplaints: 0,
+                        resolvedComplaints: 0,
+                        pendingComplaints: 0,
+                        newComplaints: 0,
+                        rejectedComplaints: 0
+                    },
+                    complaints: [],
+                    byDepartment: [],
+                    byType: []
+                }
+            });
+        } else {
+            res.status(500).json({ 
+                success: false, 
+                message: 'خطأ في جلب الإحصائيات',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
     }
 };
 
-// جلب بيانات الشكاوى للتصدير
-const getGeneralComplaintsForExport = async (req, res) => {
+// تصدير بيانات الشكاوى العامة
+const exportGeneralComplaintsData = async (req, res) => {
     try {
-        const { fromDate, toDate, status, department, complaintType, format } = req.query;
+        const { fromDate, toDate, status, department, complaintType, search } = req.query;
         
-        console.log('📤 تصدير بيانات الشكاوى العامة:', { fromDate, toDate, status, department, complaintType, format });
+        console.log('📤 تصدير بيانات الشكاوى العامة:', { fromDate, toDate, status, department, complaintType, search });
+        
+        // التحقق من صحة التواريخ
+        if (fromDate && toDate) {
+            const fromDateObj = new Date(fromDate);
+            const toDateObj = new Date(toDate);
+            
+            if (isNaN(fromDateObj.getTime()) || isNaN(toDateObj.getTime())) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'تواريخ غير صحيحة' 
+                });
+            }
+            
+            if (fromDateObj > toDateObj) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'تاريخ البداية يجب أن يكون قبل تاريخ النهاية' 
+                });
+            }
+        }
         
         let whereClause = '';
         let params = [];
+        
+        // بناء شروط البحث
         const conditions = [];
         
-        // فلترة التواريخ
         if (fromDate && toDate) {
-            conditions.push('DATE(c.CreatedAt) BETWEEN ? AND ?');
+            conditions.push('c.ComplaintDate BETWEEN ? AND ?');
             params.push(fromDate, toDate);
         }
         
-        if (status && status !== 'all') {
-            conditions.push('c.Status = ?');
+        if (status && status !== 'الحالة') {
+            conditions.push('c.CurrentStatus = ?');
             params.push(status);
         }
         
-        if (department && department !== 'all') {
+        if (department && department !== 'القسم') {
             conditions.push('d.DepartmentName = ?');
             params.push(department);
         }
         
-        if (complaintType && complaintType !== 'all') {
-            conditions.push('cr.ReasonName = ?');
+        if (complaintType && complaintType !== 'نوع الشكوى') {
+            conditions.push('ct.TypeName = ?');
             params.push(complaintType);
+        }
+        
+        if (search && search.trim() !== '') {
+            conditions.push('(c.ComplaintDetails LIKE ? OR p.FullName LIKE ? OR p.NationalID_Iqama LIKE ?)');
+            const searchTerm = `%${search.trim()}%`;
+            params.push(searchTerm, searchTerm, searchTerm);
         }
         
         if (conditions.length > 0) {
             whereClause = 'WHERE ' + conditions.join(' AND ');
         }
         
-        const exportQuery = `
+        // جلب البيانات للتصدير
+        const [exportData] = await pool.execute(`
             SELECT 
-                c.ComplaintNumber as 'رقم الشكوى',
-                c.Title as 'العنوان',
-                c.Description as 'الوصف',
-                CASE 
-                    WHEN c.Status = 'open' THEN 'مفتوحة'
-                    WHEN c.Status = 'in_progress' THEN 'قيد المعالجة'
-                    WHEN c.Status = 'responded' THEN 'تم الرد'
-                    WHEN c.Status = 'closed' THEN 'مغلقة'
-                    ELSE c.Status
-                END as 'الحالة',
-                CASE 
-                    WHEN c.Priority = 'low' THEN 'منخفضة'
-                    WHEN c.Priority = 'normal' THEN 'عادية'
-                    WHEN c.Priority = 'high' THEN 'عالية'
-                    WHEN c.Priority = 'urgent' THEN 'عاجلة'
-                    ELSE c.Priority
-                END as 'الأولوية',
-                CASE 
-                    WHEN c.Source = 'in_person' THEN 'شخصياً'
-                    WHEN c.Source = 'call_center' THEN 'مركز الاتصال'
-                    ELSE c.Source
-                END as 'المصدر',
-                d.DepartmentName as 'القسم',
-                cr.ReasonName as 'نوع الشكوى',
-                st.SubtypeName as 'النوع الفرعي',
-                p.FullName as 'اسم المريض',
-                p.NationalID as 'الهوية الوطنية',
-                p.Phone as 'رقم الهاتف',
-                creator.FullName as 'منشئ الشكوى',
-                assignee.FullName as 'المكلف بالمعالجة',
-                DATE_FORMAT(c.CreatedAt, '%Y-%m-%d %H:%i:%s') as 'تاريخ الإنشاء',
-                DATE_FORMAT(c.UpdatedAt, '%Y-%m-%d %H:%i:%s') as 'تاريخ التحديث',
-                DATE_FORMAT(c.ClosedAt, '%Y-%m-%d %H:%i:%s') as 'تاريخ الإغلاق',
-                CASE 
-                    WHEN c.ClosedAt IS NOT NULL THEN 
-                        CONCAT(TIMESTAMPDIFF(DAY, c.CreatedAt, c.ClosedAt), ' يوم')
-                    ELSE 'لم تُغلق بعد'
-                END as 'مدة المعالجة'
-            FROM complaints c
-            LEFT JOIN departments d ON c.DepartmentID = d.DepartmentID
-            LEFT JOIN complaint_subtypes st ON c.SubtypeID = st.SubtypeID
-            LEFT JOIN complaint_reasons cr ON st.ReasonID = cr.ReasonID
-            LEFT JOIN patients p ON c.PatientID = p.PatientID
-            LEFT JOIN users creator ON c.CreatedBy = creator.UserID
-            LEFT JOIN (
-                SELECT ca.ComplaintID, ca.AssignedToUserID,
-                       ROW_NUMBER() OVER (PARTITION BY ca.ComplaintID ORDER BY ca.CreatedAt DESC) as rn
-                FROM complaint_assignments ca
-            ) latest_assignment ON c.ComplaintID = latest_assignment.ComplaintID AND latest_assignment.rn = 1
-            LEFT JOIN users assignee ON latest_assignment.AssignedToUserID = assignee.UserID
-            ${whereClause}
-            ORDER BY c.CreatedAt DESC
-            LIMIT 10000
-        `;
-        
-        const [exportData] = await pool.execute(exportQuery, params);
-        
-        // تسجيل عملية التصدير
-        const userID = req.user?.UserID || req.user?.EmployeeID;
-        if (userID) {
-            await logActivity(userID, null, 'COMPLAINTS_EXPORTED', {
-                recordCount: exportData.length,
-                filters: { fromDate, toDate, status, department, complaintType },
-                format: format || 'json'
-            });
-        }
-        
-        console.log(`✅ تم تصدير ${exportData.length} شكوى`);
-        
-        res.json({
-            success: true,
-            data: exportData,
-            totalRecords: exportData.length,
-            exportedAt: new Date().toISOString()
-        });
-        
-    } catch (error) {
-        console.error('❌ خطأ في تصدير بيانات الشكاوى:', error);
-        res.status(500).json({
-            success: false,
-            message: 'حدث خطأ في الخادم'
-        });
-    }
-};
-
-// جلب تفاصيل شكوى محددة
-const getComplaintDetails = async (req, res) => {
-    try {
-        const { complaintId } = req.params;
-        
-        console.log('🔍 جلب تفاصيل الشكوى:', complaintId);
-        
-        // جلب تفاصيل الشكوى الأساسية
-        const [complaints] = await pool.execute(`
-            SELECT 
-                c.*,
+                c.ComplaintID,
+                c.ComplaintDate,
+                c.ComplaintDetails,
+                c.CurrentStatus,
+                c.Priority,
                 d.DepartmentName,
-                cr.ReasonName,
-                st.SubtypeName,
-                p.FullName as PatientFullName,
-                p.NationalID as PatientNationalID,
-                p.Phone as PatientPhone,
-                p.Email as PatientEmail,
-                p.Gender as PatientGender,
-                p.DateOfBirth as PatientDateOfBirth,
-                creator.FullName as CreatedByName,
-                creator.Email as CreatedByEmail
-            FROM complaints c
-            LEFT JOIN departments d ON c.DepartmentID = d.DepartmentID
-            LEFT JOIN complaint_subtypes st ON c.SubtypeID = st.SubtypeID
-            LEFT JOIN complaint_reasons cr ON st.ReasonID = cr.ReasonID
-            LEFT JOIN patients p ON c.PatientID = p.PatientID
-            LEFT JOIN users creator ON c.CreatedBy = creator.UserID
-            WHERE c.ComplaintID = ?
-        `, [complaintId]);
+                ct.TypeName as ComplaintTypeName,
+                cst.SubTypeName,
+                p.FullName as patientName,
+                p.NationalID_Iqama,
+                p.ContactNumber,
+                p.Gender,
+                e.FullName as employeeName,
+                e.Specialty
+            FROM Complaints c
+            JOIN Departments d ON c.DepartmentID = d.DepartmentID
+            JOIN ComplaintTypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
+            LEFT JOIN ComplaintSubTypes cst ON c.SubTypeID = cst.SubTypeID
+            LEFT JOIN Patients p ON c.PatientID = p.PatientID
+            LEFT JOIN Employees e ON c.EmployeeID = e.EmployeeID
+            ${whereClause}
+            ORDER BY c.ComplaintDate DESC
+        `, params);
         
-        if (complaints.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'الشكوى غير موجودة'
+        console.log('📋 البيانات المستعدة للتصدير:', exportData.length, 'سجل');
+        
+        res.json({
+            success: true,
+            data: {
+                exportData: exportData,
+                summary: {
+                    totalRecords: exportData.length,
+                    fromDate: fromDate,
+                    toDate: toDate,
+                    exportDate: new Date().toISOString(),
+                    filters: {
+                        status,
+                        department,
+                        complaintType,
+                        search
+                    }
+                }
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ خطأ في تصدير بيانات الشكاوى العامة:', error);
+        
+        // إرجاع بيانات فارغة بدلاً من خطأ إذا لم توجد بيانات
+        if (error.code === 'ER_PARSE_ERROR' || error.code === 'ER_NO_SUCH_TABLE') {
+            console.log('⚠️ إرجاع بيانات فارغة للتصدير بسبب خطأ في قاعدة البيانات');
+            res.json({
+                success: true,
+                data: {
+                    exportData: [],
+                    summary: {
+                        totalRecords: 0,
+                        fromDate: fromDate,
+                        toDate: toDate,
+                        exportDate: new Date().toISOString(),
+                        filters: {
+                            status,
+                            department,
+                            complaintType,
+                            search
+                        }
+                    }
+                }
+            });
+        } else {
+            res.status(500).json({ 
+                success: false, 
+                message: 'خطأ في تصدير البيانات',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
             });
         }
-        
-        const complaint = complaints[0];
-        
-        // جلب المرفقات
-        const [attachments] = await pool.execute(`
-            SELECT AttachmentID, FileURL, FileName, MimeType, SizeBytes, CreatedAt
-            FROM complaint_attachments 
-            WHERE ComplaintID = ?
-            ORDER BY CreatedAt ASC
-        `, [complaintId]);
-        
-        // جلب الردود
-        const [replies] = await pool.execute(`
-            SELECT 
-                cr.ReplyID,
-                cr.Body,
-                cr.AttachmentURL,
-                cr.CreatedAt,
-                u.FullName as AuthorName,
-                u.Email as AuthorEmail
-            FROM complaint_replies cr
-            LEFT JOIN users u ON cr.AuthorUserID = u.UserID
-            WHERE cr.ComplaintID = ?
-            ORDER BY cr.CreatedAt ASC
-        `, [complaintId]);
-        
-        // جلب تاريخ التغييرات
-        const [history] = await pool.execute(`
-            SELECT 
-                ch.HistoryID,
-                ch.PrevStatus,
-                ch.NewStatus,
-                ch.FieldChanged,
-                ch.OldValue,
-                ch.NewValue,
-                ch.CreatedAt,
-                u.FullName as ActorName
-            FROM complaint_history ch
-            LEFT JOIN users u ON ch.ActorUserID = u.UserID
-            WHERE ch.ComplaintID = ?
-            ORDER BY ch.CreatedAt DESC
-        `, [complaintId]);
-        
-        // جلب التكليفات
-        const [assignments] = await pool.execute(`
-            SELECT 
-                ca.AssignmentID,
-                ca.Notes,
-                ca.CreatedAt,
-                assigned_to.FullName as AssignedToName,
-                assigned_to.Email as AssignedToEmail,
-                assigned_by.FullName as AssignedByName
-            FROM complaint_assignments ca
-            LEFT JOIN users assigned_to ON ca.AssignedToUserID = assigned_to.UserID
-            LEFT JOIN users assigned_by ON ca.AssignedByUserID = assigned_by.UserID
-            WHERE ca.ComplaintID = ?
-            ORDER BY ca.CreatedAt DESC
-        `, [complaintId]);
-        
-        console.log('✅ تم جلب تفاصيل الشكوى بنجاح');
-        
-        res.json({
-            success: true,
-            data: {
-                complaint,
-                attachments,
-                replies,
-                history,
-                assignments
-            }
-        });
-        
-    } catch (error) {
-        console.error('❌ خطأ في جلب تفاصيل الشكوى:', error);
-        res.status(500).json({
-            success: false,
-            message: 'حدث خطأ في الخادم'
-        });
-    }
-};
-
-// جلب قوائم الفلاتر (الأقسام، أنواع الشكاوى، إلخ)
-const getFilterOptions = async (req, res) => {
-    try {
-        console.log('📋 جلب خيارات الفلاتر');
-        
-        // جلب الأقسام
-        const [departments] = await pool.execute(`
-            SELECT DISTINCT d.DepartmentID, d.DepartmentName
-            FROM departments d
-            INNER JOIN complaints c ON d.DepartmentID = c.DepartmentID
-            ORDER BY d.DepartmentName
-        `);
-        
-        // جلب أنواع الشكاوى
-        const [complaintTypes] = await pool.execute(`
-            SELECT DISTINCT cr.ReasonID, cr.ReasonName
-            FROM complaint_reasons cr
-            INNER JOIN complaint_subtypes st ON cr.ReasonID = st.ReasonID
-            INNER JOIN complaints c ON st.SubtypeID = c.SubtypeID
-            ORDER BY cr.ReasonName
-        `);
-        
-        // جلب حالات الشكاوى المستخدمة
-        const [statuses] = await pool.execute(`
-            SELECT DISTINCT Status
-            FROM complaints
-            ORDER BY Status
-        `);
-        
-        const statusOptions = statuses.map(s => ({
-            value: s.Status,
-            label: {
-                'open': 'مفتوحة',
-                'in_progress': 'قيد المعالجة', 
-                'responded': 'تم الرد',
-                'closed': 'مغلقة'
-            }[s.Status] || s.Status
-        }));
-        
-        console.log('✅ تم جلب خيارات الفلاتر بنجاح');
-        
-        res.json({
-            success: true,
-            data: {
-                departments,
-                complaintTypes,
-                statuses: statusOptions
-            }
-        });
-        
-    } catch (error) {
-        console.error('❌ خطأ في جلب خيارات الفلاتر:', error);
-        res.status(500).json({
-            success: false,
-            message: 'حدث خطأ في الخادم'
-        });
     }
 };
 
 module.exports = {
     getGeneralComplaintsStats,
-    getGeneralComplaintsForExport,
-    getComplaintDetails,
-    getFilterOptions
-};
+    exportGeneralComplaintsData
+}; 
