@@ -1,42 +1,12 @@
 const pool = require('../config/database');
+const { logActivity } = require('./logsController');
 
-// إنشاء جدول الطلبات العامة إذا لم يكن موجوداً
-const createGeneralRequestsTable = async () => {
-    try {
-        console.log('🔧 التحقق من وجود جدول الطلبات العامة...');
-        
-        const createTableQuery = `
-            CREATE TABLE IF NOT EXISTS GeneralRequests (
-                RequestID INT AUTO_INCREMENT PRIMARY KEY,
-                RequestType VARCHAR(100) NOT NULL,
-                RequestDate DATETIME DEFAULT CURRENT_TIMESTAMP,
-                RequestDetails TEXT,
-                IsFulfilled TINYINT(1) DEFAULT 0,
-                FulfillmentDate DATETIME NULL,
-                ResponsibleEmployeeID INT NULL,
-                CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                FOREIGN KEY (ResponsibleEmployeeID) REFERENCES Employees(EmployeeID) ON DELETE SET NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        `;
-        
-        await pool.execute(createTableQuery);
-        console.log('✅ جدول الطلبات العامة جاهز');
-        
-    } catch (error) {
-        console.error('❌ خطأ في إنشاء جدول الطلبات العامة:', error);
-    }
-};
-
-// استدعاء إنشاء الجدول عند بدء التشغيل
-createGeneralRequestsTable();
-
-// جلب إحصائيات الطلبات العامة من قاعدة البيانات الفعلية
+// جلب إحصائيات الطلبات العامة من الشكاوى الفعلية
 const getGeneralRequestStats = async (req, res) => {
     try {
         const { fromDate, toDate } = req.query;
         
-        console.log('📊 جلب إحصائيات الشكاوى الفعلية من قاعدة البيانات:', { fromDate, toDate });
+        console.log('📊 جلب إحصائيات الطلبات العامة من قاعدة البيانات:', { fromDate, toDate });
         
         // التحقق من صحة التواريخ
         if (fromDate && toDate) {
@@ -58,392 +28,366 @@ const getGeneralRequestStats = async (req, res) => {
             }
         }
         
-        let whereClause = '';
+        // بناء شروط التاريخ
+        let dateCondition = '';
         let params = [];
         
         if (fromDate && toDate) {
-            whereClause = 'WHERE c.ComplaintDate BETWEEN ? AND ?';
-            params = [fromDate, toDate];
+            dateCondition = 'AND DATE(c.CreatedAt) BETWEEN ? AND ?';
+            params.push(fromDate, toDate);
         }
         
-        // إحصائيات عامة للشكاوى
-        const [stats] = await pool.execute(`
+        // الإحصائيات العامة
+        const [generalStats] = await pool.execute(`
             SELECT 
                 COUNT(*) as totalRequests,
-                SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as fulfilledRequests,
-                SUM(CASE WHEN c.CurrentStatus NOT IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as unfulfilledRequests,
-                ROUND((SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as fulfillmentRate
-            FROM Complaints c
-            INNER JOIN Departments d ON c.DepartmentID = d.DepartmentID
-            ${whereClause}
-        `, params);
-        
-        // إحصائيات حسب نوع الشكوى
-        const [typeStats] = await pool.execute(`
-            SELECT 
-                ct.TypeName as RequestType,
-                COUNT(*) as requestCount,
-                SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as fulfilledCount,
-                SUM(CASE WHEN c.CurrentStatus NOT IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as unfulfilledCount,
-                ROUND((SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as fulfillmentRate
-            FROM Complaints c
-            INNER JOIN ComplaintTypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
-            ${whereClause}
-            GROUP BY ct.ComplaintTypeID, ct.TypeName
-            HAVING requestCount > 0
-            ORDER BY requestCount DESC
+                SUM(CASE WHEN c.Status = 'open' THEN 1 ELSE 0 END) as pendingRequests,
+                SUM(CASE WHEN c.Status = 'closed' THEN 1 ELSE 0 END) as fulfilledRequests,
+                SUM(CASE WHEN c.Status = 'in_progress' THEN 1 ELSE 0 END) as inProgressRequests,
+                SUM(CASE WHEN c.Priority = 'urgent' THEN 1 ELSE 0 END) as urgentRequests,
+                AVG(CASE WHEN c.Status = 'closed' AND c.ClosedAt IS NOT NULL 
+                    THEN TIMESTAMPDIFF(HOUR, c.CreatedAt, c.ClosedAt) 
+                    ELSE NULL END) as avgFulfillmentTimeHours
+            FROM complaints c
+            WHERE 1=1 ${dateCondition}
         `, params);
         
         // إحصائيات حسب القسم
         const [departmentStats] = await pool.execute(`
             SELECT 
-                d.DepartmentName as RequestType,
-                COUNT(*) as requestCount,
-                SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as fulfilledCount,
-                SUM(CASE WHEN c.CurrentStatus NOT IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as unfulfilledCount,
-                ROUND((SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as fulfillmentRate
-            FROM Complaints c
-            INNER JOIN Departments d ON c.DepartmentID = d.DepartmentID
-            ${whereClause}
+                d.DepartmentName,
+                COUNT(c.ComplaintID) as requestCount,
+                SUM(CASE WHEN c.Status = 'closed' THEN 1 ELSE 0 END) as fulfilledCount,
+                ROUND(AVG(CASE WHEN c.Status = 'closed' AND c.ClosedAt IS NOT NULL 
+                    THEN TIMESTAMPDIFF(HOUR, c.CreatedAt, c.ClosedAt) 
+                    ELSE NULL END), 2) as avgHours
+            FROM complaints c
+            LEFT JOIN departments d ON c.DepartmentID = d.DepartmentID
+            WHERE 1=1 ${dateCondition}
             GROUP BY d.DepartmentID, d.DepartmentName
             HAVING requestCount > 0
             ORDER BY requestCount DESC
-        `, params);
-        
-        // معالجة النتائج الفارغة
-        const generalStats = stats[0] || {
-            totalRequests: 0,
-            fulfilledRequests: 0,
-            unfulfilledRequests: 0,
-            fulfillmentRate: 0
-        };
-        
-        console.log('📈 الإحصائيات العامة:', generalStats);
-        console.log('📊 الإحصائيات حسب النوع:', typeStats);
-        console.log('🏥 الإحصائيات حسب القسم:', departmentStats);
-        
-        res.json({
-            success: true,
-            data: {
-                general: generalStats,
-                byType: typeStats || [],
-                byDepartment: departmentStats || []
-            }
-        });
-        
-    } catch (error) {
-        console.error('❌ خطأ في جلب إحصائيات الشكاوى:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'خطأ في جلب الإحصائيات',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-};
-
-// جلب أنواع الطلبات المتاحة من قاعدة البيانات الفعلية
-const getAvailableRequestTypes = async (req, res) => {
-    try {
-        console.log('📋 جلب أنواع الشكاوى المتاحة من قاعدة البيانات...');
-        
-        // جلب أنواع الشكاوى الموجودة في قاعدة البيانات
-        const [requestTypes] = await pool.execute(`
-            SELECT DISTINCT ct.TypeName as name, COUNT(c.ComplaintID) as count
-            FROM ComplaintTypes ct
-            LEFT JOIN Complaints c ON ct.ComplaintTypeID = c.ComplaintTypeID
-            GROUP BY ct.ComplaintTypeID, ct.TypeName
-            HAVING count > 0
-            ORDER BY count DESC
-        `);
-        
-        console.log('📊 أنواع الشكاوى المتاحة:', requestTypes);
-        
-        res.json({
-            success: true,
-            data: requestTypes.map(type => ({
-                name: type.name,
-                count: type.count
-            }))
-        });
-        
-    } catch (error) {
-        console.error('❌ خطأ في جلب أنواع الشكاوى:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'خطأ في جلب أنواع الشكاوى',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-};
-
-// جلب بيانات الشكاوى للتصدير من قاعدة البيانات الفعلية
-const getGeneralRequestsForExport = async (req, res) => {
-    try {
-        const { fromDate, toDate, includeEmployeeData } = req.query;
-        
-        console.log('📊 جلب بيانات الشكاوى للتصدير:', { fromDate, toDate, includeEmployeeData });
-        
-        let whereClause = '';
-        let params = [];
-        
-        if (fromDate && toDate) {
-            whereClause = 'WHERE c.ComplaintDate BETWEEN ? AND ?';
-            params = [fromDate, toDate];
-        }
-        
-        let selectClause = `
-            c.ComplaintID as RequestID,
-            ct.TypeName as RequestType,
-            c.ComplaintDate as RequestDate,
-            c.ComplaintDetails as RequestDetails,
-            CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END as IsFulfilled,
-            c.ResolutionDate as FulfillmentDate,
-            CASE 
-                WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 'منفذ'
-                ELSE 'غير منفذ'
-            END as Status
-        `;
-        
-        if (includeEmployeeData === 'true') {
-            selectClause += `, e.FullName as EmployeeName`;
-        }
-        
-        const [requests] = await pool.execute(`
-            SELECT ${selectClause}
-            FROM Complaints c
-            INNER JOIN ComplaintTypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
-            LEFT JOIN Employees e ON c.EmployeeID = e.EmployeeID
-            ${whereClause}
-            ORDER BY c.ComplaintDate DESC
-        `, params);
-        
-        console.log('📈 عدد الشكاوى للتصدير:', requests.length);
-        
-        res.json({
-            success: true,
-            data: {
-                requests: requests || []
-            }
-        });
-        
-    } catch (error) {
-        console.error('❌ خطأ في جلب بيانات التصدير:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'خطأ في جلب بيانات التصدير',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-};
-
-// جلب التحليل والاقتراحات من قاعدة البيانات الفعلية
-const getGeneralRequestAnalysis = async (req, res) => {
-    try {
-        const { fromDate, toDate } = req.query;
-        
-        console.log('📊 جلب تحليل الشكاوى:', { fromDate, toDate });
-        
-        let whereClause = '';
-        let params = [];
-        
-        if (fromDate && toDate) {
-            whereClause = 'WHERE c.ComplaintDate BETWEEN ? AND ?';
-            params = [fromDate, toDate];
-        }
-        
-        // تحليل الأداء العام
-        const [performanceStats] = await pool.execute(`
-            SELECT 
-                COUNT(*) as totalRequests,
-                SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as fulfilledRequests,
-                SUM(CASE WHEN c.CurrentStatus NOT IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as unfulfilledRequests,
-                ROUND((SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as fulfillmentRate
-            FROM Complaints c
-            ${whereClause}
-        `, params);
-        
-        // أنواع الشكاوى الأكثر شيوعاً
-        const [topRequestTypes] = await pool.execute(`
-            SELECT 
-                ct.TypeName as RequestType,
-                COUNT(*) as requestCount,
-                SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as fulfilledCount,
-                ROUND((SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as fulfillmentRate
-            FROM Complaints c
-            INNER JOIN ComplaintTypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
-            ${whereClause}
-            GROUP BY ct.ComplaintTypeID, ct.TypeName
-            ORDER BY requestCount DESC
-            LIMIT 5
-        `, params);
-        
-        // متوسط وقت الاستجابة
-        const [responseTimeStats] = await pool.execute(`
-            SELECT 
-                AVG(DATEDIFF(c.ResolutionDate, c.ComplaintDate)) as avgResponseDays
-            FROM Complaints c
-            WHERE c.CurrentStatus IN ('مغلقة', 'تم الحل') AND c.ResolutionDate IS NOT NULL
-            ${whereClause ? whereClause.replace('c.ComplaintDate', 'c.ComplaintDate') : ''}
-        `, params);
-        
-        // الشكاوى الأكثر تأخيراً
-        const [delayedRequests] = await pool.execute(`
-            SELECT 
-                c.ComplaintID as RequestID,
-                ct.TypeName as RequestType,
-                c.ComplaintDetails as RequestDetails,
-                c.ComplaintDate as RequestDate,
-                DATEDIFF(CURRENT_DATE, c.ComplaintDate) as daysPending
-            FROM Complaints c
-            INNER JOIN ComplaintTypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
-            WHERE c.CurrentStatus != 'مغلقة'
-            ${whereClause ? whereClause.replace('c.ComplaintDate', 'c.ComplaintDate') : ''}
-            ORDER BY daysPending DESC
             LIMIT 10
         `, params);
         
-        // اقتراحات التحسين
-        const suggestions = [];
+        // إحصائيات حسب نوع الطلب (استخدام أسباب الشكاوى كأنواع طلبات)
+        const [typeStats] = await pool.execute(`
+            SELECT 
+                COALESCE(cr.ReasonName, 'غير محدد') as requestType,
+                COUNT(c.ComplaintID) as count,
+                SUM(CASE WHEN c.Status = 'closed' THEN 1 ELSE 0 END) as fulfilled
+            FROM complaints c
+            LEFT JOIN complaint_subtypes st ON c.SubtypeID = st.SubtypeID
+            LEFT JOIN complaint_reasons cr ON st.ReasonID = cr.ReasonID
+            WHERE 1=1 ${dateCondition}
+            GROUP BY cr.ReasonName
+            ORDER BY count DESC
+            LIMIT 10
+        `, params);
         
-        if (performanceStats[0] && performanceStats[0].fulfillmentRate < 80) {
-            suggestions.push({
-                title: 'تحسين معدل الحل',
-                description: `معدل حل الشكاوى ${performanceStats[0].fulfillmentRate}% أقل من المستهدف (80%). يجب تحسين سرعة الاستجابة للشكاوى.`,
-                priority: 'عالية',
-                type: 'أداء'
-            });
-        }
+        // إحصائيات شهرية
+        const [monthlyStats] = await pool.execute(`
+            SELECT 
+                DATE_FORMAT(c.CreatedAt, '%Y-%m') as month,
+                COUNT(*) as total,
+                SUM(CASE WHEN c.Status = 'closed' THEN 1 ELSE 0 END) as fulfilled,
+                SUM(CASE WHEN c.Status = 'open' THEN 1 ELSE 0 END) as pending
+            FROM complaints c
+            WHERE c.CreatedAt >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+            ${dateCondition}
+            GROUP BY DATE_FORMAT(c.CreatedAt, '%Y-%m')
+            ORDER BY month DESC
+            LIMIT 12
+        `, params);
         
-        if (topRequestTypes.length > 0) {
-            const slowestType = topRequestTypes.find(type => type.fulfillmentRate < 70);
-            if (slowestType) {
-                suggestions.push({
-                    title: `تحسين أداء ${slowestType.RequestType}`,
-                    description: `نوع الشكوى ${slowestType.RequestType} لديه معدل حل ${slowestType.fulfillmentRate}% فقط. يجب مراجعة إجراءات العمل.`,
-                    priority: 'متوسطة',
-                    type: 'نوع شكوى محدد'
-                });
-            }
-        }
+        // إحصائيات الأداء
+        const [performanceStats] = await pool.execute(`
+            SELECT 
+                COUNT(CASE WHEN c.Status = 'closed' AND c.ClosedAt IS NOT NULL 
+                      AND TIMESTAMPDIFF(HOUR, c.CreatedAt, c.ClosedAt) <= 24 THEN 1 END) as within24Hours,
+                COUNT(CASE WHEN c.Status = 'closed' AND c.ClosedAt IS NOT NULL 
+                      AND TIMESTAMPDIFF(HOUR, c.CreatedAt, c.ClosedAt) <= 72 THEN 1 END) as within72Hours,
+                COUNT(CASE WHEN c.Status = 'closed' AND c.ClosedAt IS NOT NULL 
+                      AND TIMESTAMPDIFF(HOUR, c.CreatedAt, c.ClosedAt) > 72 THEN 1 END) as moreThan72Hours
+            FROM complaints c
+            WHERE c.Status = 'closed' AND c.ClosedAt IS NOT NULL ${dateCondition}
+        `, params);
         
-        if (responseTimeStats[0] && responseTimeStats[0].avgResponseDays > 7) {
-            suggestions.push({
-                title: 'تسريع الاستجابة للشكاوى',
-                description: `متوسط وقت الاستجابة ${responseTimeStats[0].avgResponseDays.toFixed(1)} أيام. يجب تقليل وقت الاستجابة.`,
-                priority: 'عالية',
-                type: 'وقت الاستجابة'
-            });
-        }
-        
-        if (delayedRequests.length > 0) {
-            suggestions.push({
-                title: 'معالجة الشكاوى المتأخرة',
-                description: `يوجد ${delayedRequests.length} شكوى متأخرة يحتاج إلى معالجة عاجلة.`,
-                priority: 'عالية',
-                type: 'شكاوى متأخرة'
-            });
-        }
+        console.log('✅ تم جلب إحصائيات الطلبات العامة بنجاح');
         
         res.json({
             success: true,
             data: {
-                performance: performanceStats[0] || {},
-                topRequestTypes: topRequestTypes || [],
-                responseTime: responseTimeStats[0] || {},
-                delayedRequests: delayedRequests || [],
-                suggestions: suggestions
+                overview: generalStats[0],
+                departmentBreakdown: departmentStats,
+                typeBreakdown: typeStats,
+                monthlyTrend: monthlyStats,
+                performance: performanceStats[0]
             }
         });
         
     } catch (error) {
-        console.error('❌ خطأ في جلب التحليل:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'خطأ في جلب التحليل',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-};
-
-// إضافة طلب جديد
-const addGeneralRequest = async (req, res) => {
-    try {
-        const { RequestType, RequestDetails, ResponsibleEmployeeID } = req.body;
-        
-        console.log('📝 إضافة طلب جديد:', { RequestType, RequestDetails, ResponsibleEmployeeID });
-        
-        // التحقق من البيانات المطلوبة
-        if (!RequestType || !RequestDetails) {
-            return res.status(400).json({
-                success: false,
-                message: 'نوع الطلب وتفاصيل الطلب مطلوبان'
-            });
-        }
-        
-        // إضافة الطلب إلى قاعدة البيانات
-        const [result] = await pool.execute(`
-            INSERT INTO GeneralRequests (RequestType, RequestDetails, ResponsibleEmployeeID)
-            VALUES (?, ?, ?)
-        `, [RequestType, RequestDetails, ResponsibleEmployeeID || null]);
-        
-        console.log('✅ تم إضافة الطلب بنجاح، ID:', result.insertId);
-        
-        res.json({
-            success: true,
-            message: 'تم إضافة الطلب بنجاح',
-            data: {
-                RequestID: result.insertId,
-                RequestType,
-                RequestDetails,
-                ResponsibleEmployeeID
-            }
-        });
-        
-    } catch (error) {
-        console.error('❌ خطأ في إضافة الطلب:', error);
+        console.error('❌ خطأ في جلب إحصائيات الطلبات العامة:', error);
         res.status(500).json({
             success: false,
-            message: 'خطأ في إضافة الطلب',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: 'حدث خطأ في الخادم'
         });
     }
 };
 
-// تحديث حالة الطلب
-const updateRequestStatus = async (req, res) => {
+// تصدير بيانات الطلبات العامة
+const exportGeneralRequestData = async (req, res) => {
     try {
-        const { RequestID } = req.params;
-        const { IsFulfilled, FulfillmentDate } = req.body;
+        const { fromDate, toDate, status, department, format } = req.query;
         
-        console.log('🔄 تحديث حالة الطلب:', { RequestID, IsFulfilled, FulfillmentDate });
+        console.log('📤 تصدير بيانات الطلبات العامة:', { fromDate, toDate, status, department, format });
         
-        // التحقق من وجود الطلب
-        const [existingRequest] = await pool.execute(
-            'SELECT * FROM GeneralRequests WHERE RequestID = ?',
-            [RequestID]
-        );
+        let whereClause = '';
+        let params = [];
+        const conditions = [];
         
-        if (existingRequest.length === 0) {
+        // فلترة التواريخ
+        if (fromDate && toDate) {
+            conditions.push('DATE(c.CreatedAt) BETWEEN ? AND ?');
+            params.push(fromDate, toDate);
+        }
+        
+        if (status && status !== 'all') {
+            conditions.push('c.Status = ?');
+            params.push(status);
+        }
+        
+        if (department && department !== 'all') {
+            conditions.push('d.DepartmentName = ?');
+            params.push(department);
+        }
+        
+        if (conditions.length > 0) {
+            whereClause = 'WHERE ' + conditions.join(' AND ');
+        }
+        
+        const exportQuery = `
+            SELECT 
+                c.ComplaintNumber as 'رقم الطلب',
+                c.Title as 'عنوان الطلب',
+                c.Description as 'تفاصيل الطلب',
+                CASE 
+                    WHEN c.Status = 'open' THEN 'معلق'
+                    WHEN c.Status = 'in_progress' THEN 'قيد التنفيذ'
+                    WHEN c.Status = 'closed' THEN 'مكتمل'
+                    ELSE c.Status
+                END as 'حالة الطلب',
+                CASE 
+                    WHEN c.Priority = 'low' THEN 'منخفضة'
+                    WHEN c.Priority = 'normal' THEN 'عادية'
+                    WHEN c.Priority = 'high' THEN 'عالية'
+                    WHEN c.Priority = 'urgent' THEN 'عاجلة'
+                    ELSE c.Priority
+                END as 'الأولوية',
+                d.DepartmentName as 'القسم المسؤول',
+                cr.ReasonName as 'نوع الطلب',
+                st.SubtypeName as 'التصنيف الفرعي',
+                creator.FullName as 'مقدم الطلب',
+                assignee.FullName as 'المسؤول عن التنفيذ',
+                DATE_FORMAT(c.CreatedAt, '%Y-%m-%d %H:%i:%s') as 'تاريخ التقديم',
+                DATE_FORMAT(c.UpdatedAt, '%Y-%m-%d %H:%i:%s') as 'تاريخ آخر تحديث',
+                DATE_FORMAT(c.ClosedAt, '%Y-%m-%d %H:%i:%s') as 'تاريخ الإكمال',
+                CASE 
+                    WHEN c.ClosedAt IS NOT NULL THEN 
+                        CONCAT(TIMESTAMPDIFF(HOUR, c.CreatedAt, c.ClosedAt), ' ساعة')
+                    ELSE 'لم يكتمل بعد'
+                END as 'مدة التنفيذ'
+            FROM complaints c
+            LEFT JOIN departments d ON c.DepartmentID = d.DepartmentID
+            LEFT JOIN complaint_subtypes st ON c.SubtypeID = st.SubtypeID
+            LEFT JOIN complaint_reasons cr ON st.ReasonID = cr.ReasonID
+            LEFT JOIN users creator ON c.CreatedBy = creator.UserID
+            LEFT JOIN (
+                SELECT ca.ComplaintID, ca.AssignedToUserID,
+                       ROW_NUMBER() OVER (PARTITION BY ca.ComplaintID ORDER BY ca.CreatedAt DESC) as rn
+                FROM complaint_assignments ca
+            ) latest_assignment ON c.ComplaintID = latest_assignment.ComplaintID AND latest_assignment.rn = 1
+            LEFT JOIN users assignee ON latest_assignment.AssignedToUserID = assignee.UserID
+            ${whereClause}
+            ORDER BY c.CreatedAt DESC
+            LIMIT 5000
+        `;
+        
+        const [exportData] = await pool.execute(exportQuery, params);
+        
+        // تسجيل عملية التصدير
+        const userID = req.user?.UserID || req.user?.EmployeeID;
+        if (userID) {
+            await logActivity(userID, null, 'GENERAL_REQUESTS_EXPORTED', {
+                recordCount: exportData.length,
+                filters: { fromDate, toDate, status, department },
+                format: format || 'json'
+            });
+        }
+        
+        console.log(`✅ تم تصدير ${exportData.length} طلب عام`);
+        
+        res.json({
+            success: true,
+            data: exportData,
+            totalRecords: exportData.length,
+            exportedAt: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('❌ خطأ في تصدير بيانات الطلبات العامة:', error);
+        res.status(500).json({
+            success: false,
+            message: 'حدث خطأ في الخادم'
+        });
+    }
+};
+
+// جلب تفاصيل طلب محدد
+const getRequestDetails = async (req, res) => {
+    try {
+        const { requestId } = req.params;
+        
+        console.log('🔍 جلب تفاصيل الطلب:', requestId);
+        
+        // استخدام نفس منطق جلب تفاصيل الشكوى لأن الطلبات العامة هي شكاوى أيضاً
+        const [requests] = await pool.execute(`
+            SELECT 
+                c.*,
+                d.DepartmentName,
+                cr.ReasonName as RequestType,
+                st.SubtypeName,
+                creator.FullName as CreatedByName,
+                creator.Email as CreatedByEmail
+            FROM complaints c
+            LEFT JOIN departments d ON c.DepartmentID = d.DepartmentID
+            LEFT JOIN complaint_subtypes st ON c.SubtypeID = st.SubtypeID
+            LEFT JOIN complaint_reasons cr ON st.ReasonID = cr.ReasonID
+            LEFT JOIN users creator ON c.CreatedBy = creator.UserID
+            WHERE c.ComplaintID = ?
+        `, [requestId]);
+        
+        if (requests.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'الطلب غير موجود'
             });
         }
         
-        // تحديث حالة الطلب
-        const updateQuery = `
-            UPDATE GeneralRequests 
-            SET IsFulfilled = ?, FulfillmentDate = ?
-            WHERE RequestID = ?
-        `;
+        const request = requests[0];
         
-        await pool.execute(updateQuery, [
-            IsFulfilled ? 1 : 0,
-            IsFulfilled ? (FulfillmentDate || new Date()) : null,
-            RequestID
-        ]);
+        // جلب تاريخ التحديثات
+        const [updates] = await pool.execute(`
+            SELECT 
+                ch.HistoryID,
+                ch.PrevStatus,
+                ch.NewStatus,
+                ch.FieldChanged,
+                ch.OldValue,
+                ch.NewValue,
+                ch.CreatedAt,
+                u.FullName as UpdatedByName
+            FROM complaint_history ch
+            LEFT JOIN users u ON ch.ActorUserID = u.UserID
+            WHERE ch.ComplaintID = ?
+            ORDER BY ch.CreatedAt DESC
+        `, [requestId]);
         
-        console.log('✅ تم تحديث حالة الطلب بنجاح');
+        // جلب التكليفات
+        const [assignments] = await pool.execute(`
+            SELECT 
+                ca.AssignmentID,
+                ca.Notes,
+                ca.CreatedAt,
+                assigned_to.FullName as ResponsiblePersonName,
+                assigned_to.Email as ResponsiblePersonEmail,
+                assigned_by.FullName as AssignedByName
+            FROM complaint_assignments ca
+            LEFT JOIN users assigned_to ON ca.AssignedToUserID = assigned_to.UserID
+            LEFT JOIN users assigned_by ON ca.AssignedByUserID = assigned_by.UserID
+            WHERE ca.ComplaintID = ?
+            ORDER BY ca.CreatedAt DESC
+        `, [requestId]);
+        
+        console.log('✅ تم جلب تفاصيل الطلب بنجاح');
+        
+        res.json({
+            success: true,
+            data: {
+                request,
+                updates,
+                assignments
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ خطأ في جلب تفاصيل الطلب:', error);
+        res.status(500).json({
+            success: false,
+            message: 'حدث خطأ في الخادم'
+        });
+    }
+};
+
+// تحديث حالة طلب عام
+const updateRequestStatus = async (req, res) => {
+    try {
+        const { requestId } = req.params;
+        const { status, notes } = req.body;
+        const userID = req.user?.UserID || req.user?.EmployeeID;
+        
+        if (!status || !['open', 'in_progress', 'closed'].includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'حالة غير صحيحة'
+            });
+        }
+        
+        // جلب الحالة الحالية
+        const [currentRequest] = await pool.execute(
+            'SELECT Status FROM complaints WHERE ComplaintID = ?',
+            [requestId]
+        );
+        
+        if (currentRequest.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'الطلب غير موجود'
+            });
+        }
+        
+        const oldStatus = currentRequest[0].Status;
+        
+        // تحديث الحالة
+        const updateData = [status];
+        let updateQuery = 'UPDATE complaints SET Status = ?, UpdatedAt = CURRENT_TIMESTAMP';
+        
+        if (status === 'closed') {
+            updateQuery += ', ClosedAt = CURRENT_TIMESTAMP';
+        }
+        
+        updateQuery += ' WHERE ComplaintID = ?';
+        updateData.push(requestId);
+        
+        await pool.execute(updateQuery, updateData);
+        
+        // إضافة سجل في التاريخ
+        await pool.execute(
+            `INSERT INTO complaint_history (ComplaintID, ActorUserID, PrevStatus, NewStatus, 
+                                          FieldChanged, OldValue, NewValue) 
+             VALUES (?, ?, ?, ?, 'Status', ?, ?)`,
+            [requestId, userID, oldStatus, status, oldStatus, status]
+        );
+        
+        // تسجيل النشاط
+        await logActivity(userID, null, 'REQUEST_STATUS_UPDATED', {
+            requestId,
+            oldStatus,
+            newStatus: status,
+            notes
+        });
+        
+        console.log(`✅ تم تحديث حالة الطلب ${requestId} من ${oldStatus} إلى ${status}`);
         
         res.json({
             success: true,
@@ -454,87 +398,78 @@ const updateRequestStatus = async (req, res) => {
         console.error('❌ خطأ في تحديث حالة الطلب:', error);
         res.status(500).json({
             success: false,
-            message: 'خطأ في تحديث حالة الطلب',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: 'حدث خطأ في الخادم'
         });
     }
 };
 
-// دالة لفحص البيانات الموجودة في جدول الشكاوى
-const checkExistingData = async (req, res) => {
+// تكليف طلب لمسؤول
+const assignRequest = async (req, res) => {
     try {
-        console.log('🔍 فحص البيانات الموجودة في جدول الشكاوى...');
+        const { requestId } = req.params;
+        const { responsiblePersonId, notes } = req.body;
+        const assignerID = req.user?.UserID || req.user?.EmployeeID;
         
-        // جلب جميع الشكاوى
-        const [allRequests] = await pool.execute(`
-            SELECT 
-                c.ComplaintID as RequestID,
-                ct.TypeName as RequestType,
-                c.ComplaintDate as RequestDate,
-                c.ComplaintDetails as RequestDetails,
-                CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END as IsFulfilled,
-                c.ResolutionDate as FulfillmentDate,
-                c.EmployeeID as ResponsibleEmployeeID
-            FROM Complaints c
-            INNER JOIN ComplaintTypes ct ON c.ComplaintTypeID = ct.ComplaintTypeID
-            ORDER BY c.ComplaintDate DESC
-        `);
+        if (!responsiblePersonId) {
+            return res.status(400).json({
+                success: false,
+                message: 'معرف المسؤول مطلوب'
+            });
+        }
         
-        // جلب إحصائيات سريعة
-        const [stats] = await pool.execute(`
-            SELECT 
-                COUNT(*) as totalRequests,
-                SUM(CASE WHEN c.CurrentStatus IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as fulfilledRequests,
-                SUM(CASE WHEN c.CurrentStatus NOT IN ('مغلقة', 'تم الحل') THEN 1 ELSE 0 END) as unfulfilledRequests
-            FROM Complaints c
-        `);
+        // التحقق من وجود المسؤول
+        const [responsible] = await pool.execute(
+            'SELECT UserID, FullName FROM users WHERE UserID = ? AND IsActive = 1',
+            [responsiblePersonId]
+        );
         
-        // جلب أنواع الشكاوى المختلفة
-        const [requestTypes] = await pool.execute(`
-            SELECT 
-                ct.TypeName as RequestType,
-                COUNT(c.ComplaintID) as count
-            FROM ComplaintTypes ct
-            LEFT JOIN Complaints c ON ct.ComplaintTypeID = c.ComplaintTypeID
-            GROUP BY ct.ComplaintTypeID, ct.TypeName
-            HAVING count > 0
-            ORDER BY count DESC
-        `);
+        if (responsible.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'المسؤول غير موجود أو غير نشط'
+            });
+        }
         
-        console.log('📊 البيانات الموجودة:', {
-            totalRequests: stats[0].totalRequests,
-            fulfilledRequests: stats[0].fulfilledRequests,
-            unfulfilledRequests: stats[0].unfulfilledRequests,
-            requestTypes: requestTypes.length,
-            sampleRequests: allRequests.slice(0, 5) // أول 5 شكاوى
+        // إضافة التكليف
+        await pool.execute(
+            `INSERT INTO complaint_assignments (ComplaintID, AssignedToUserID, AssignedByUserID, Notes) 
+             VALUES (?, ?, ?, ?)`,
+            [requestId, responsiblePersonId, assignerID, notes || '']
+        );
+        
+        // تحديث حالة الطلب
+        await pool.execute(
+            'UPDATE complaints SET Status = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE ComplaintID = ?',
+            ['in_progress', requestId]
+        );
+        
+        // تسجيل النشاط
+        await logActivity(assignerID, responsiblePersonId, 'REQUEST_ASSIGNED', {
+            requestId,
+            assignedToName: responsible[0].FullName,
+            notes
         });
+        
+        console.log(`✅ تم تكليف الطلب ${requestId} للمسؤول ${responsible[0].FullName}`);
         
         res.json({
             success: true,
-            data: {
-                summary: stats[0],
-                requestTypes: requestTypes,
-                recentRequests: allRequests.slice(0, 10), // آخر 10 شكاوى
-                totalCount: allRequests.length
-            }
+            message: 'تم تكليف الطلب بنجاح'
         });
         
     } catch (error) {
-        console.error('❌ خطأ في فحص البيانات:', error);
+        console.error('❌ خطأ في تكليف الطلب:', error);
         res.status(500).json({
             success: false,
-            message: 'خطأ في فحص البيانات',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: 'حدث خطأ في الخادم'
         });
     }
 };
 
 module.exports = {
     getGeneralRequestStats,
-    getGeneralRequestsForExport,
-    getGeneralRequestAnalysis,
-    getAvailableRequestTypes,
-    addGeneralRequest,
+    exportGeneralRequestData,
+    getRequestDetails,
     updateRequestStatus,
-    checkExistingData
-}; 
+    assignRequest
+};

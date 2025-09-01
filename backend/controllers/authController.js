@@ -6,334 +6,469 @@ const { logActivity } = require('./logsController');
 
 // ===== helpers =====
 async function ensureCoreTables() {
-  await pool.execute(`
-    CREATE TABLE IF NOT EXISTS Roles (
-      RoleID INT PRIMARY KEY,
-      RoleName VARCHAR(64) UNIQUE NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-  `);
-
-  await pool.execute(`
-    INSERT INTO Roles (RoleID, RoleName) VALUES
-    (1,'SUPER_ADMIN'), (2,'EMPLOYEE'), (3,'ADMIN')
-    ON DUPLICATE KEY UPDATE RoleName = VALUES(RoleName);
-  `);
-
-  await pool.execute(`
-    CREATE TABLE IF NOT EXISTS Departments (
-      DepartmentID INT PRIMARY KEY AUTO_INCREMENT,
-      DepartmentName VARCHAR(100) NOT NULL UNIQUE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-  `);
-
-  // نضيف NationalID في المخطط الجديد مباشرة
-  await pool.execute(`
-    CREATE TABLE IF NOT EXISTS Employees (
-      EmployeeID INT PRIMARY KEY AUTO_INCREMENT,
-      FullName VARCHAR(150) NOT NULL,
-      Username VARCHAR(80) NOT NULL UNIQUE,
-      PasswordHash VARCHAR(255) NOT NULL,
-      Email VARCHAR(150),
-      PhoneNumber VARCHAR(40),
-      NationalID VARCHAR(20) UNIQUE,
-      RoleID INT NOT NULL,
-      Specialty VARCHAR(150),
-      JoinDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      DepartmentID INT NULL,
-      CONSTRAINT fk_employees_role FOREIGN KEY (RoleID) REFERENCES Roles(RoleID)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-  `);
+  // تأكد من وجود الجداول الأساسية (roles, departments, users)
+  // هذه الجداول موجودة بالفعل في قاعدة البيانات الجديدة
+  console.log('✅ Core tables (roles, departments, users) already exist in new database');
 }
 
-// إعداد جدول الموظفين (إضافة أعمدة/فهرس/مفتاح أجنبي إن لزم)
+// إعداد جدول المستخدمين (التحقق من الجداول الجديدة)
 const setupEmployeesTable = async () => {
   try {
     await ensureCoreTables();
-
-    // تأكد من NationalID
-    const [nidCol] = await pool.execute(`
-      SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Employees' AND COLUMN_NAME = 'NationalID'
-    `);
-    if (!nidCol[0].cnt) {
-      await pool.execute(`ALTER TABLE Employees ADD COLUMN NationalID VARCHAR(20) NULL AFTER PhoneNumber;`);
-      await pool.execute(`ALTER TABLE Employees ADD UNIQUE KEY uniq_employees_nationalid (NationalID);`);
-      console.log('➕ NationalID added + unique index');
-    }
-
-    // تأكد من DepartmentID + الفهرس + FK
-    const [depCol] = await pool.execute(`
-      SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Employees' AND COLUMN_NAME = 'DepartmentID'
-    `);
-    if (!depCol[0].cnt) {
-      await pool.execute(`ALTER TABLE Employees ADD COLUMN DepartmentID INT NULL;`);
-      console.log('➕ DepartmentID added');
-    }
-
-    const [idxRows] = await pool.execute(`SHOW INDEX FROM Employees WHERE Key_name = 'idx_employees_departmentid'`);
-    if (!idxRows.length) {
-      await pool.execute(`ALTER TABLE Employees ADD INDEX idx_employees_departmentid (DepartmentID);`);
-      console.log('➕ idx_employees_departmentid added');
-    }
-
-    const [fkRows] = await pool.execute(`
-      SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Employees'
-      AND COLUMN_NAME = 'DepartmentID' AND REFERENCED_TABLE_NAME = 'Departments'
-    `);
-    if (!fkRows[0].cnt) {
-      await pool.execute(`
-        ALTER TABLE Employees
-        ADD CONSTRAINT fk_employees_department
-        FOREIGN KEY (DepartmentID) REFERENCES Departments(DepartmentID)
-        ON DELETE SET NULL ON UPDATE CASCADE;
-      `);
-      console.log('🔗 fk_employees_department added');
-    }
-
-    console.log('✅ Employees table ready (NationalID + DepartmentID)');
+    console.log('✅ Users table ready (using new database schema)');
   } catch (error) {
     console.error('❌ setupEmployeesTable error:', error);
   }
 };
 
-// ===== Controllers =====
-
-// التسجيل العام = موظف فقط + قسم موجود
-const register = async (req, res) => {
-  try {
-    console.log('=== بدء عملية التسجيل ===');
-    console.log('Request Body:', req.body);
-    
-    const {
-      fullName, username, password, email, phoneNumber,
-      specialty, departmentID, nationalID
-    } = req.body;
-    
-    console.log('Parsed Data:', {
-      fullName, username, password: password ? '***' : 'MISSING', 
-      email, phoneNumber, specialty, departmentID, nationalID
-    });
-
-    // التحقق من الحقول المطلوبة
-    if (!fullName || !username || !password || !departmentID || !nationalID) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'الاسم، اسم المستخدم، كلمة المرور، القسم، والهوية الوطنية مطلوبة',
-        missing: {
-          fullName: !fullName,
-          username: !username,
-          password: !password,
-          departmentID: !departmentID,
-          nationalID: !nationalID
-        }
-      });
-    }
-
-    const [dept] = await pool.execute('SELECT 1 FROM Departments WHERE DepartmentID = ?', [departmentID]);
-    if (!dept.length) {
-      return res.status(400).json({ success: false, message: 'القسم المحدد غير موجود' });
-    }
-
-    const [exists] = await pool.execute('SELECT EmployeeID FROM Employees WHERE Username = ?', [username]);
-    if (exists.length) {
-      return res.status(400).json({ success: false, message: 'اسم المستخدم موجود مسبقاً' });
-    }
-
-    // التحقق من عدم تكرار الهوية الوطنية
-    const [nidExists] = await pool.execute('SELECT EmployeeID FROM Employees WHERE NationalID = ?', [nationalID]);
-    if (nidExists.length) {
-      return res.status(400).json({ success: false, message: 'رقم الهوية الوطنية مستخدم مسبقاً' });
-    }
-
-    const enforcedRoleID = 2; // EMPLOYEE
-    const passwordHash = await bcrypt.hash(password, 10);
-    
-    console.log('=== بيانات الإدراج ===');
-    console.log('SQL Query:', `
-      INSERT INTO Employees (
-        FullName, Username, PasswordHash, Email, PhoneNumber, NationalID, RoleID, Specialty, DepartmentID
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    console.log('Values:', [
-      fullName, username, '***HASHED***', email || null, phoneNumber || null, 
-      nationalID, enforcedRoleID, specialty || null, departmentID
-    ]);
-
-    const [ins] = await pool.execute(`
-      INSERT INTO Employees (
-        FullName, Username, PasswordHash, Email, PhoneNumber, NationalID, RoleID, Specialty, DepartmentID
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [fullName, username, passwordHash, email || null, phoneNumber || null, nationalID, enforcedRoleID, specialty || null, departmentID]
-    );
-    
-    console.log('=== تم الإدراج بنجاح ===');
-    console.log('Insert Result:', ins);
-    console.log('New Employee ID:', ins.insertId);
-
-    const [rows] = await pool.execute(`
-      SELECT e.EmployeeID, e.FullName, e.Username, e.Email, e.PhoneNumber, e.NationalID, e.Specialty, e.JoinDate,
-             e.DepartmentID, r.RoleName, r.RoleID, d.DepartmentName
-      FROM Employees e
-      JOIN Roles r ON e.RoleID = r.RoleID
-      LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
-      WHERE e.EmployeeID = ?`, [ins.insertId]
-    );
-
-    const employee = rows[0];
-    const token = jwt.sign(
-      { employeeID: employee.EmployeeID, username: employee.Username, roleID: employee.RoleID, roleName: employee.RoleName },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
-    );
-
-    try {
-      await logActivity(
-        employee.EmployeeID,
-        employee.Username,
-        'register',
-        `تم إنشاء حساب جديد: ${employee.FullName} (${employee.RoleName}) - القسم: ${employee.DepartmentName}`,
-        req.ip, req.get('User-Agent')
-      );
-    } catch (e) {
-      console.error('logActivity(register) error:', e);
-    }
-
-    res.status(201).json({ success: true, message: 'تم إنشاء الحساب بنجاح', data: { employee, token } });
-  } catch (error) {
-    console.error('register error:', error);
-    res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
-  }
-};
-
+// تسجيل الدخول
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ success: false, message: 'اسم المستخدم وكلمة المرور مطلوبان' });
 
-    const [rows] = await pool.execute(`
-      SELECT e.EmployeeID, e.FullName, e.Username, e.PasswordHash, e.Email, e.PhoneNumber, e.NationalID, e.Specialty, e.JoinDate,
-             e.DepartmentID, r.RoleName, r.RoleID, d.DepartmentName
-      FROM Employees e
-      JOIN Roles r ON e.RoleID = r.RoleID
-      LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
-      WHERE e.Username = ?`, [username]
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'اسم المستخدم وكلمة المرور مطلوبان'
+      });
+    }
+
+    // البحث عن المستخدم في الجدول الجديد
+    const [users] = await pool.execute(
+      `SELECT u.UserID, u.FullName, u.Username, u.Email, u.Phone, u.NationalID, 
+              u.EmployeeNumber, u.PasswordHash, u.RoleID, u.DepartmentID, u.IsActive,
+              r.RoleName, d.DepartmentName
+       FROM users u 
+       JOIN roles r ON u.RoleID = r.RoleID 
+       LEFT JOIN departments d ON u.DepartmentID = d.DepartmentID
+       WHERE (u.Username = ? OR u.Email = ?) AND u.IsActive = 1`,
+      [username, username]
     );
-    if (!rows.length) return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
 
-    const employee = rows[0];
-    const ok = await bcrypt.compare(password, employee.PasswordHash);
-    if (!ok) return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+    if (users.length === 0) {
+      await logActivity(null, null, 'LOGIN_FAILED', { username, reason: 'User not found' });
+      return res.status(401).json({
+        success: false,
+        message: 'اسم المستخدم أو كلمة المرور غير صحيحة'
+      });
+    }
 
-    delete employee.PasswordHash;
+    const user = users[0];
 
+    // التحقق من كلمة المرور
+    const isPasswordValid = await bcrypt.compare(password, user.PasswordHash);
+
+    if (!isPasswordValid) {
+      await logActivity(user.UserID, null, 'LOGIN_FAILED', { username, reason: 'Invalid password' });
+      return res.status(401).json({
+        success: false,
+        message: 'اسم المستخدم أو كلمة المرور غير صحيحة'
+      });
+    }
+
+    // إنشاء JWT token
     const token = jwt.sign(
-      { employeeID: employee.EmployeeID, username: employee.Username, roleID: employee.RoleID, roleName: employee.RoleName },
-      process.env.JWT_SECRET || 'your-secret-key',
+      {
+        UserID: user.UserID,
+        EmployeeID: user.UserID, // للتوافق مع الكود القديم
+        FullName: user.FullName,
+        Username: user.Username,
+        Email: user.Email,
+        RoleID: user.RoleID,
+        RoleName: user.RoleName,
+        DepartmentID: user.DepartmentID,
+        DepartmentName: user.DepartmentName
+      },
+      process.env.JWT_SECRET || 'fallback_secret_key',
       { expiresIn: '24h' }
     );
 
-    try {
-      await logActivity(
-        employee.EmployeeID,
-        employee.Username,
-        'login',
-        `تم تسجيل الدخول بنجاح - القسم: ${employee.DepartmentName || 'غير محدد'}`,
-        req.ip, req.get('User-Agent')
-      );
-    } catch (e) {
-      console.error('logActivity(login) error:', e);
+    await logActivity(user.UserID, null, 'LOGIN_SUCCESS', { username });
+
+    res.json({
+      success: true,
+      message: 'تم تسجيل الدخول بنجاح',
+      token,
+      user: {
+        UserID: user.UserID,
+        EmployeeID: user.UserID, // للتوافق مع الكود القديم
+        FullName: user.FullName,
+        Username: user.Username,
+        Email: user.Email,
+        Phone: user.Phone,
+        RoleID: user.RoleID,
+        RoleName: user.RoleName,
+        DepartmentID: user.DepartmentID,
+        DepartmentName: user.DepartmentName
+      }
+    });
+
+  } catch (error) {
+    console.error('خطأ في تسجيل الدخول:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
+  }
+};
+
+// تسجيل مستخدم جديد (للمدير الأعلى فقط)
+const register = async (req, res) => {
+  try {
+    const { fullName, username, email, phone, nationalID, employeeNumber, password, roleID, departmentID } = req.body;
+
+    // التحقق من البيانات المطلوبة
+    if (!fullName || !username || !email || !phone || !nationalID || !employeeNumber || !password || !roleID) {
+      return res.status(400).json({
+        success: false,
+        message: 'جميع البيانات مطلوبة'
+      });
     }
 
-    res.json({ success: true, message: 'تم تسجيل الدخول بنجاح', data: { employee, token } });
-  } catch (error) {
-    console.error('login error:', error);
-    res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
-  }
-};
-
-const getCurrentUser = async (req, res) => {
-  try {
-    const auth = req.headers['authorization'];
-    const token = auth && auth.split(' ')[1];
-    if (!token) return res.status(401).json({ success: false, message: 'التوكن مطلوب' });
-
-    let decoded;
-    try { decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key'); }
-    catch (e) { return res.status(401).json({ success: false, message: 'التوكن غير صالح أو منتهي الصلاحية' }); }
-
-    const [rows] = await pool.execute(`
-      SELECT e.EmployeeID, e.FullName, e.Username, e.Email, e.PhoneNumber, e.NationalID, e.Specialty, e.JoinDate,
-             e.DepartmentID, r.RoleName, r.RoleID, d.DepartmentName
-      FROM Employees e
-      JOIN Roles r ON e.RoleID = r.RoleID
-      LEFT JOIN Departments d ON e.DepartmentID = d.DepartmentID
-      WHERE e.EmployeeID = ?`, [decoded.employeeID]
+    // التحقق من عدم وجود المستخدم مسبقاً
+    const [existingUsers] = await pool.execute(
+      `SELECT UserID FROM users 
+       WHERE Username = ? OR Email = ? OR Phone = ? OR NationalID = ? OR EmployeeNumber = ?`,
+      [username, email, phone, nationalID, employeeNumber]
     );
-    if (!rows.length) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
 
-    res.json({ success: true, data: rows[0] });
+    if (existingUsers.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'المستخدم موجود مسبقاً (اسم المستخدم، البريد الإلكتروني، رقم الهاتف، الهوية الوطنية، أو رقم الموظف)'
+      });
+    }
+
+    // تشفير كلمة المرور
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // إدراج المستخدم الجديد
+    const [result] = await pool.execute(
+      `INSERT INTO users (FullName, Username, Email, Phone, NationalID, EmployeeNumber, 
+                         PasswordHash, RoleID, DepartmentID, IsActive) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [fullName, username, email, phone, nationalID, employeeNumber, hashedPassword, roleID, departmentID]
+    );
+
+    await logActivity(req.user?.UserID, result.insertId, 'USER_CREATED', { 
+      username, email, roleID, departmentID 
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'تم إنشاء المستخدم بنجاح',
+      data: {
+        UserID: result.insertId,
+        FullName: fullName,
+        Username: username,
+        Email: email
+      }
+    });
+
   } catch (error) {
-    console.error('getCurrentUser error:', error);
-    res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
+    console.error('خطأ في تسجيل المستخدم:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
   }
 };
 
-const getRoles = async (req, res) => {
+// تغيير كلمة المرور
+const changePassword = async (req, res) => {
   try {
-    const [roles] = await pool.execute('SELECT * FROM Roles ORDER BY RoleName');
-    res.json({ success: true, data: roles });
+    const { currentPassword, newPassword } = req.body;
+    const userID = req.user.UserID;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'كلمة المرور الحالية والجديدة مطلوبتان'
+      });
+    }
+
+    // جلب كلمة المرور الحالية
+    const [users] = await pool.execute(
+      'SELECT PasswordHash FROM users WHERE UserID = ?',
+      [userID]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'المستخدم غير موجود'
+      });
+    }
+
+    // التحقق من كلمة المرور الحالية
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, users[0].PasswordHash);
+
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'كلمة المرور الحالية غير صحيحة'
+      });
+    }
+
+    // تشفير كلمة المرور الجديدة
+    const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+
+    // تحديث كلمة المرور
+    await pool.execute(
+      'UPDATE users SET PasswordHash = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE UserID = ?',
+      [hashedNewPassword, userID]
+    );
+
+    await logActivity(userID, userID, 'PASSWORD_CHANGED', {});
+
+    res.json({
+      success: true,
+      message: 'تم تغيير كلمة المرور بنجاح'
+    });
+
   } catch (error) {
-    console.error('getRoles error:', error);
-    res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
+    console.error('خطأ في تغيير كلمة المرور:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
   }
 };
 
-const updateProfile = async (req, res) => {
+// طلب إعادة تعيين كلمة المرور
+const requestPasswordReset = async (req, res) => {
   try {
-    const employeeID = req.user.EmployeeID;
-    const { name, phone, idNumber, empNumber, email } = req.body;
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'البريد الإلكتروني مطلوب'
+      });
+    }
+
+    // التحقق من وجود المستخدم
+    const [users] = await pool.execute(
+      'SELECT UserID, FullName FROM users WHERE Email = ? AND IsActive = 1',
+      [email]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'المستخدم غير موجود'
+      });
+    }
+
+    const user = users[0];
+
+    // إنشاء رمز إعادة التعيين
+    const resetToken = jwt.sign(
+      { UserID: user.UserID, purpose: 'password_reset' },
+      process.env.JWT_SECRET || 'fallback_secret_key',
+      { expiresIn: '1h' }
+    );
+
+    // حفظ رمز إعادة التعيين في قاعدة البيانات
+    const tokenHash = await bcrypt.hash(resetToken, 10);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // ساعة واحدة
 
     await pool.execute(
-      `UPDATE Employees 
-       SET FullName = ?, PhoneNumber = ?, Email = ?, NationalID = ?, EmployeeNumber = ?
-       WHERE EmployeeID = ?`,
-      [name, phone, email, idNumber, empNumber, employeeID]
+      `INSERT INTO password_resets (UserID, TokenHash, ExpiresAt) VALUES (?, ?, ?)`,
+      [user.UserID, tokenHash, expiresAt]
     );
 
-    try {
-      await logActivity(employeeID, req.user.Username, 'profile_update', 'تم تحديث بيانات البروفايل', req.ip, req.get('User-Agent'));
-    } catch (e) {
-      console.error('logActivity(profile_update) error:', e);
-    }
+    await logActivity(user.UserID, user.UserID, 'PASSWORD_RESET_REQUESTED', { email });
 
-    res.json({ success: true, message: 'تم تحديث البيانات بنجاح' });
+    // في التطبيق الحقيقي، يجب إرسال البريد الإلكتروني هنا
+    res.json({
+      success: true,
+      message: 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني',
+      // في البيئة التطويرية فقط
+      ...(process.env.NODE_ENV === 'development' && { resetToken })
+    });
+
   } catch (error) {
-    console.error('خطأ في تحديث البروفايل:', error);
-    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+    console.error('خطأ في طلب إعادة تعيين كلمة المرور:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
   }
 };
 
-const getDepartments = async (req, res) => {
+// إعادة تعيين كلمة المرور
+const resetPassword = async (req, res) => {
   try {
-    const [departments] = await pool.execute(
-      'SELECT DepartmentID, DepartmentName FROM Departments ORDER BY DepartmentName'
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'الرمز وكلمة المرور الجديدة مطلوبان'
+      });
+    }
+
+    // التحقق من صحة الرمز
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+    } catch (error) {
+      return res.status(401).json({
+        success: false,
+        message: 'رمز إعادة التعيين غير صحيح أو منتهي الصلاحية'
+      });
+    }
+
+    if (decoded.purpose !== 'password_reset') {
+      return res.status(401).json({
+        success: false,
+        message: 'رمز غير صحيح'
+      });
+    }
+
+    // التحقق من وجود الرمز في قاعدة البيانات وأنه لم يُستخدم
+    const [resetRequests] = await pool.execute(
+      `SELECT ResetID FROM password_resets 
+       WHERE UserID = ? AND ExpiresAt > NOW() AND UsedAt IS NULL`,
+      [decoded.UserID]
     );
-    res.json({ success: true, data: departments });
+
+    if (resetRequests.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'رمز إعادة التعيين غير صحيح أو منتهي الصلاحية'
+      });
+    }
+
+    // تشفير كلمة المرور الجديدة
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // تحديث كلمة المرور
+    await pool.execute(
+      'UPDATE users SET PasswordHash = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE UserID = ?',
+      [hashedPassword, decoded.UserID]
+    );
+
+    // تحديد الرمز كمستخدم
+    await pool.execute(
+      'UPDATE password_resets SET UsedAt = NOW() WHERE UserID = ? AND UsedAt IS NULL',
+      [decoded.UserID]
+    );
+
+    await logActivity(decoded.UserID, decoded.UserID, 'PASSWORD_RESET_COMPLETED', {});
+
+    res.json({
+      success: true,
+      message: 'تم إعادة تعيين كلمة المرور بنجاح'
+    });
+
   } catch (error) {
-    console.error('getDepartments error:', error);
-    res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
+    console.error('خطأ في إعادة تعيين كلمة المرور:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
+  }
+};
+
+// جلب معلومات المستخدم الحالي
+const getProfile = async (req, res) => {
+  try {
+    const userID = req.user.UserID;
+
+    const [users] = await pool.execute(
+      `SELECT u.UserID, u.FullName, u.Username, u.Email, u.Phone, u.NationalID, 
+              u.EmployeeNumber, u.RoleID, u.DepartmentID, u.IsActive, u.CreatedAt,
+              r.RoleName, d.DepartmentName
+       FROM users u 
+       JOIN roles r ON u.RoleID = r.RoleID 
+       LEFT JOIN departments d ON u.DepartmentID = d.DepartmentID
+       WHERE u.UserID = ?`,
+      [userID]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'المستخدم غير موجود'
+      });
+    }
+
+    const user = users[0];
+    delete user.PasswordHash; // إزالة كلمة المرور من الاستجابة
+
+    res.json({
+      success: true,
+      data: user
+    });
+
+  } catch (error) {
+    console.error('خطأ في جلب معلومات المستخدم:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
+  }
+};
+
+// تحديث معلومات المستخدم
+const updateProfile = async (req, res) => {
+  try {
+    const userID = req.user.UserID;
+    const { fullName, email, phone } = req.body;
+
+    if (!fullName || !email || !phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'الاسم الكامل والبريد الإلكتروني ورقم الهاتف مطلوبة'
+      });
+    }
+
+    // التحقق من عدم تضارب البريد الإلكتروني أو رقم الهاتف مع مستخدمين آخرين
+    const [existingUsers] = await pool.execute(
+      `SELECT UserID FROM users 
+       WHERE (Email = ? OR Phone = ?) AND UserID != ?`,
+      [email, phone, userID]
+    );
+
+    if (existingUsers.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'البريد الإلكتروني أو رقم الهاتف مستخدم من قبل مستخدم آخر'
+      });
+    }
+
+    // تحديث المعلومات
+    await pool.execute(
+      `UPDATE users SET FullName = ?, Email = ?, Phone = ?, UpdatedAt = CURRENT_TIMESTAMP 
+       WHERE UserID = ?`,
+      [fullName, email, phone, userID]
+    );
+
+    await logActivity(userID, userID, 'PROFILE_UPDATED', { fullName, email, phone });
+
+    res.json({
+      success: true,
+      message: 'تم تحديث المعلومات بنجاح'
+    });
+
+  } catch (error) {
+    console.error('خطأ في تحديث معلومات المستخدم:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
   }
 };
 
 module.exports = {
   setupEmployeesTable,
-  register,
   login,
-  getCurrentUser,
-  getRoles,
-  getDepartments,
+  register,
+  changePassword,
+  requestPasswordReset,
+  resetPassword,
+  getProfile,
   updateProfile
 };
- 

@@ -24,16 +24,17 @@ const authenticateWithImpersonation = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userID = decoded.UserID || decoded.EmployeeID;
     
     // Get user data from database to ensure it's current
     const [users] = await pool.execute(`
-      SELECT e.EmployeeID, e.FullName, e.Username, e.Email, e.RoleID, e.DepartmentID,
+      SELECT u.UserID, u.FullName, u.Username, u.Email, u.RoleID, u.DepartmentID, u.IsActive,
              r.RoleName, d.DepartmentName
-      FROM employees e
-      LEFT JOIN roles r ON e.RoleID = r.RoleID
-      LEFT JOIN departments d ON e.DepartmentID = d.DepartmentID
-      WHERE e.EmployeeID = ?
-    `, [decoded.EmployeeID]);
+      FROM users u
+      LEFT JOIN roles r ON u.RoleID = r.RoleID
+      LEFT JOIN departments d ON u.DepartmentID = d.DepartmentID
+      WHERE u.UserID = ? AND u.IsActive = 1
+    `, [userID]);
 
     if (!users.length) {
       return res.status(401).json({ 
@@ -43,6 +44,9 @@ const authenticateWithImpersonation = async (req, res, next) => {
     }
 
     const user = users[0];
+    
+    // إضافة خصائص للتوافق مع الكود القديم
+    user.EmployeeID = user.UserID;
     
     // Set user in request
     req.user = user;
@@ -58,32 +62,13 @@ const authenticateWithImpersonation = async (req, res, next) => {
                               req.originalUrl.includes('/dept-admin/');
     
     if (user.RoleID === 1 && isDeptAdminRequest) {
-      // Check if there's an active impersonation session
-      const [impersonations] = await pool.execute(`
-        SELECT i.TargetEmployeeID, e.FullName, e.Username, e.Email, e.RoleID, e.DepartmentID,
-               r.RoleName, d.DepartmentName
-        FROM impersonations i
-        JOIN employees e ON i.TargetEmployeeID = e.EmployeeID
-        LEFT JOIN roles r ON e.RoleID = r.RoleID
-        LEFT JOIN departments d ON e.DepartmentID = d.DepartmentID
-        WHERE i.SuperAdminID = ? AND i.EndedAt IS NULL
-        ORDER BY i.StartedAt DESC
-        LIMIT 1
-      `, [user.EmployeeID]);
+      // في النظام الجديد، يمكن للسوبر أدمن الوصول مباشرة دون impersonation
+      // أو يمكن تطبيق نظام impersonation إذا كان مطلوباً
       
-      if (impersonations.length > 0) {
-        // Use impersonated user's context for data access
-        const impersonatedUser = impersonations[0];
-        req.user = {
-          ...impersonatedUser,
-          EmployeeID: impersonatedUser.TargetEmployeeID,
-          // Keep track that this is impersonation
-          isImpersonating: true,
-          originalSuperAdminId: user.EmployeeID
-        };
-        
-        console.log(`Super Admin ${user.FullName} accessing as ${impersonatedUser.FullName}`);
-      }
+      // للآن، سنسمح للسوبر أدمن بالوصول مباشرة
+      console.log(`Super Admin ${user.FullName} accessing dept-admin interface`);
+      
+      // يمكن إضافة منطق impersonation هنا لاحقاً إذا كان مطلوباً
     }
     
     next();
@@ -122,13 +107,8 @@ const requireDepartmentAdmin = (req, res, next) => {
     });
   }
 
-  // Allow if user is Department Admin (RoleID = 3)
-  if (req.user.RoleID === 3) {
-    return next();
-  }
-
-  // Allow if Super Admin is impersonating a Department Admin
-  if (req.user.isImpersonating && req.originalUser?.RoleID === 1) {
+  // Allow if user is Department Admin (RoleID = 3) or Super Admin (RoleID = 1)
+  if (req.user.RoleID === 3 || req.user.RoleID === 1) {
     return next();
   }
 
@@ -149,7 +129,7 @@ const logActivityWithImpersonation = async (activityType, description) => {
       const userAgent = req.headers['user-agent'];
       
       // Determine who to log the activity for
-      let logEmployeeId = user.EmployeeID;
+      let logUserID = user.UserID;
       let logUsername = user.Username;
       let logDescription = description;
       
@@ -158,10 +138,13 @@ const logActivityWithImpersonation = async (activityType, description) => {
         logDescription = `[بواسطة السوبر أدمن] ${description}`;
       }
       
-      await pool.execute(`
-        INSERT INTO ActivityLogs (EmployeeID, Username, ActivityType, Description, IPAddress, UserAgent)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [logEmployeeId, logUsername, activityType, logDescription, ip, userAgent]);
+      // استخدام دالة logActivity الجديدة
+      const { logActivity } = require('../controllers/logsController');
+      await logActivity(logUserID, null, activityType, {
+        description: logDescription,
+        ip,
+        userAgent
+      });
       
       next();
     } catch (error) {
@@ -171,8 +154,134 @@ const logActivityWithImpersonation = async (activityType, description) => {
   };
 };
 
+/**
+ * إنشاء جلسة impersonation جديدة (للسوبر أدمن فقط)
+ */
+const startImpersonation = async (req, res) => {
+  try {
+    const { targetUserID } = req.body;
+    const superAdminID = req.user.UserID;
+
+    // التحقق من أن المستخدم سوبر أدمن
+    if (req.user.RoleID !== 1) {
+      return res.status(403).json({
+        success: false,
+        message: 'فقط السوبر أدمن يمكنه استخدام هذه الميزة'
+      });
+    }
+
+    // التحقق من وجود المستخدم المستهدف
+    const [targetUser] = await pool.execute(
+      'SELECT UserID, FullName, RoleID FROM users WHERE UserID = ? AND IsActive = 1',
+      [targetUserID]
+    );
+
+    if (targetUser.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'المستخدم المستهدف غير موجود'
+      });
+    }
+
+    // يمكن إضافة جدول impersonations إذا كان مطلوباً
+    // للآن، سنعيد token جديد للمستخدم المستهدف
+    
+    const impersonationToken = jwt.sign(
+      {
+        UserID: targetUserID,
+        EmployeeID: targetUserID, // للتوافق
+        isImpersonating: true,
+        originalSuperAdminID: superAdminID
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '2h' } // جلسة impersonation لمدة ساعتين
+    );
+
+    res.json({
+      success: true,
+      message: 'تم بدء جلسة التمثيل بنجاح',
+      impersonationToken,
+      targetUser: targetUser[0]
+    });
+
+  } catch (error) {
+    console.error('Error starting impersonation:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
+  }
+};
+
+/**
+ * إنهاء جلسة impersonation
+ */
+const endImpersonation = async (req, res) => {
+  try {
+    // إرجاع token السوبر أدمن الأصلي
+    const originalSuperAdminID = req.user.originalSuperAdminID;
+    
+    if (!originalSuperAdminID) {
+      return res.status(400).json({
+        success: false,
+        message: 'لا توجد جلسة تمثيل نشطة'
+      });
+    }
+
+    // إنشاء token جديد للسوبر أدمن
+    const [superAdmin] = await pool.execute(
+      `SELECT u.UserID, u.FullName, u.Username, u.Email, u.RoleID, u.DepartmentID,
+              r.RoleName, d.DepartmentName
+       FROM users u
+       LEFT JOIN roles r ON u.RoleID = r.RoleID
+       LEFT JOIN departments d ON u.DepartmentID = d.DepartmentID
+       WHERE u.UserID = ?`,
+      [originalSuperAdminID]
+    );
+
+    if (superAdmin.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'السوبر أدمن الأصلي غير موجود'
+      });
+    }
+
+    const originalToken = jwt.sign(
+      {
+        UserID: superAdmin[0].UserID,
+        EmployeeID: superAdmin[0].UserID,
+        FullName: superAdmin[0].FullName,
+        Username: superAdmin[0].Username,
+        Email: superAdmin[0].Email,
+        RoleID: superAdmin[0].RoleID,
+        RoleName: superAdmin[0].RoleName,
+        DepartmentID: superAdmin[0].DepartmentID,
+        DepartmentName: superAdmin[0].DepartmentName
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      success: true,
+      message: 'تم إنهاء جلسة التمثيل',
+      originalToken,
+      user: superAdmin[0]
+    });
+
+  } catch (error) {
+    console.error('Error ending impersonation:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
+  }
+};
+
 module.exports = {
   authenticateWithImpersonation,
   requireDepartmentAdmin,
-  logActivityWithImpersonation
+  logActivityWithImpersonation,
+  startImpersonation,
+  endImpersonation
 };

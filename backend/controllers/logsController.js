@@ -11,11 +11,11 @@ const checkUserPermissions = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
     const [userResult] = await pool.execute(
-      `SELECT e.EmployeeID, e.Username, e.FullName, e.RoleID, r.RoleName 
-       FROM Employees e 
-       LEFT JOIN Roles r ON e.RoleID = r.RoleID 
-       WHERE e.EmployeeID = ?`,
-      [decoded.employeeID]
+      `SELECT u.UserID, u.Username, u.FullName, u.RoleID, r.RoleName 
+       FROM users u 
+       LEFT JOIN roles r ON u.RoleID = r.RoleID 
+       WHERE u.UserID = ?`,
+      [decoded.UserID || decoded.employeeID]
     );
 
     if (userResult.length === 0) {
@@ -23,7 +23,8 @@ const checkUserPermissions = async (req, res, next) => {
     }
 
     req.user = {
-      employeeID: userResult[0].EmployeeID,
+      UserID: userResult[0].UserID,
+      employeeID: userResult[0].UserID, // للتوافق مع الكود القديم
       username: userResult[0].Username,
       fullName: userResult[0].FullName,
       roleID: userResult[0].RoleID,
@@ -50,295 +51,343 @@ const checkAdminPermissions = async (req, res, next) => {
   }
 };
 
-// إنشاء جدول ActivityLogs
-const createActivityLogsTable = async () => {
-  try {
-    console.log('🔧 التحقق من وجود جدول ActivityLogs...');
-    
-    const createTable = `
-      CREATE TABLE IF NOT EXISTS ActivityLogs (
-        LogID INT AUTO_INCREMENT PRIMARY KEY,
-        EmployeeID INT,
-        Username VARCHAR(50),
-        ActivityType VARCHAR(50) NOT NULL,
-        Description TEXT NOT NULL,
-        IPAddress VARCHAR(45),
-        UserAgent TEXT,
-        RelatedID INT,
-        RelatedType VARCHAR(50),
-        CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (EmployeeID) REFERENCES Employees(EmployeeID) ON DELETE SET NULL,
-        INDEX idx_employee_id (EmployeeID),
-        INDEX idx_activity_type (ActivityType),
-        INDEX idx_created_at (CreatedAt)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `;
-    
-    await pool.execute(createTable);
-    console.log('✅ جدول ActivityLogs جاهز');
-    
-    // إضافة بعض السجلات التجريبية إذا كان الجدول فارغ
-    const [existingLogs] = await pool.execute('SELECT COUNT(*) as count FROM ActivityLogs');
-    if (existingLogs[0].count === 0) {
-      console.log('🔄 إضافة سجلات تجريبية...');
-      
-      const sampleLogs = [
-        [null, 'system', 'system_startup', 'بدء تشغيل النظام', '127.0.0.1', 'System', null, null],
-        [null, 'admin', 'login', 'تسجيل دخول المدير', '127.0.0.1', 'Mozilla/5.0', null, null],
-        [null, 'admin', 'view_logs', 'عرض سجل الأنشطة', '127.0.0.1', 'Mozilla/5.0', null, null],
-      ];
-      
-      for (const log of sampleLogs) {
-        await pool.execute(
-          `INSERT INTO ActivityLogs (EmployeeID, Username, ActivityType, Description, IPAddress, UserAgent, RelatedID, RelatedType) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          log
-        );
-      }
-      
-      console.log('✅ تم إضافة السجلات التجريبية');
-    }
-  } catch (error) {
-    console.error('❌ خطأ في إنشاء جدول ActivityLogs:', error);
-  }
-};
-
-// تسجيل نشاط جديد
-const logActivity = async (employeeID, username, activityType, description, ipAddress = null, userAgent = null, relatedID = null, relatedType = null) => {
+// دالة تسجيل النشاط
+const logActivity = async (actorUserID, effectiveUserID, action, details = {}) => {
   try {
     await pool.execute(
-      `INSERT INTO ActivityLogs (EmployeeID, Username, ActivityType, Description, IPAddress, UserAgent, RelatedID, RelatedType) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [employeeID, username, activityType, description, ipAddress, userAgent, relatedID, relatedType]
+      `INSERT INTO activitylogs (ActorUserID, EffectiveUserID, Action, Details) 
+       VALUES (?, ?, ?, ?)`,
+      [actorUserID, effectiveUserID, action, JSON.stringify(details)]
     );
   } catch (error) {
     console.error('خطأ في تسجيل النشاط:', error);
   }
 };
 
-// جلب جميع السجلات (للمدير فقط)
-const getAllLogs = async (req, res) => {
+// جلب سجلات النشاط
+const getActivityLogs = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
+    const { 
+      limit = 50, 
+      offset = 0, 
+      action, 
+      userID, 
+      dateFrom, 
+      dateTo 
+    } = req.query;
 
-    // بناء استعلام بسيط أولاً
-    const countQuery = `SELECT COUNT(*) as total FROM ActivityLogs`;
-    const [countResult] = await pool.query(countQuery);
-    const totalLogs = countResult[0].total;
+    let whereConditions = [];
+    let queryParams = [];
 
-    // استعلام السجلات باستخدام query بدلاً من execute
-    const logsQuery = `
-      SELECT al.LogID, al.Username, al.ActivityType, al.Description, 
-             al.CreatedAt, e.FullName as EmployeeName
-      FROM ActivityLogs al
-      LEFT JOIN Employees e ON al.EmployeeID = e.EmployeeID
+    if (action) {
+      whereConditions.push('al.Action = ?');
+      queryParams.push(action);
+    }
+
+    if (userID) {
+      whereConditions.push('(al.ActorUserID = ? OR al.EffectiveUserID = ?)');
+      queryParams.push(userID, userID);
+    }
+
+    if (dateFrom) {
+      whereConditions.push('DATE(al.CreatedAt) >= ?');
+      queryParams.push(dateFrom);
+    }
+
+    if (dateTo) {
+      whereConditions.push('DATE(al.CreatedAt) <= ?');
+      queryParams.push(dateTo);
+    }
+
+    const whereClause = whereConditions.length > 0 
+      ? 'WHERE ' + whereConditions.join(' AND ') 
+      : '';
+
+    const query = `
+      SELECT al.LogID, al.Action, al.Details, al.CreatedAt,
+             actor.FullName as ActorName, actor.Username as ActorUsername,
+             effective.FullName as EffectiveName, effective.Username as EffectiveUsername
+      FROM activitylogs al
+      LEFT JOIN users actor ON al.ActorUserID = actor.UserID
+      LEFT JOIN users effective ON al.EffectiveUserID = effective.UserID
+      ${whereClause}
       ORDER BY al.CreatedAt DESC
-      LIMIT ${limit} OFFSET ${offset}
+      LIMIT ? OFFSET ?
     `;
-    
-    const [logs] = await pool.query(logsQuery);
 
-    // جلب إحصائيات سريعة
-    const [todayStats] = await pool.query(
-      `SELECT COUNT(*) as todayLogs FROM ActivityLogs WHERE DATE(CreatedAt) = CURDATE()`
-    );
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const [logs] = await pool.execute(query, queryParams);
+
+    // جلب العدد الإجمالي
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM activitylogs al
+      ${whereClause}
+    `;
+
+    const [countResult] = await pool.execute(countQuery, queryParams.slice(0, -2));
 
     res.json({
       success: true,
-      data: {
-        logs,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(totalLogs / limit),
-          totalLogs,
-          logsPerPage: limit
-        },
-        stats: {
-          totalLogs,
-          todayLogs: todayStats[0].todayLogs
-        }
+      data: logs.map(log => ({
+        ...log,
+        Details: typeof log.Details === 'string' ? JSON.parse(log.Details) : log.Details
+      })),
+      pagination: {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        total: countResult[0].total
       }
     });
 
   } catch (error) {
-    console.error('خطأ في جلب السجلات:', error);
-    res.status(500).json({ message: 'خطأ في جلب السجلات' });
-  }
-};
-
-// حذف السجلات القديمة (للمدير فقط)
-const deleteOldLogs = async (req, res) => {
-  try {
-    const { days = 90 } = req.body; // حذف السجلات الأقدم من 90 يوم افتراضياً
-
-    const [result] = await pool.execute(
-      `DELETE FROM ActivityLogs WHERE CreatedAt < DATE_SUB(NOW(), INTERVAL ? DAY)`,
-      [days]
-    );
-
-    // تسجيل هذا النشاط
-    await logActivity(
-      req.user.employeeID,
-      req.user.username,
-      'delete_logs',
-      `تم حذف ${result.affectedRows} سجل قديم (أقدم من ${days} يوم)`,
-      req.ip,
-      req.get('User-Agent')
-    );
-
-    res.json({
-      success: true,
-      message: `تم حذف ${result.affectedRows} سجل قديم بنجاح`,
-      deletedCount: result.affectedRows
+    console.error('خطأ في جلب سجلات النشاط:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
     });
-
-  } catch (error) {
-    console.error('خطأ في حذف السجلات القديمة:', error);
-    res.status(500).json({ message: 'خطأ في حذف السجلات القديمة' });
   }
 };
 
-// حذف سجل واحد (للمدير فقط)
-const deleteLog = async (req, res) => {
+// جلب إحصائيات النشاط
+const getActivityStats = async (req, res) => {
   try {
-    const { logId } = req.params;
-
-    // التحقق من وجود السجل
-    const [logCheck] = await pool.execute(
-      `SELECT * FROM ActivityLogs WHERE LogID = ?`,
-      [logId]
-    );
-
-    if (logCheck.length === 0) {
-      return res.status(404).json({ message: 'السجل غير موجود' });
-    }
-
-    // حذف السجل
-    await pool.execute(
-      `DELETE FROM ActivityLogs WHERE LogID = ?`,
-      [logId]
-    );
-
-    // تسجيل هذا النشاط
-    await logActivity(
-      req.user.employeeID,
-      req.user.username,
-      'delete_log',
-      `تم حذف سجل النشاط رقم ${logId}`,
-      req.ip,
-      req.get('User-Agent')
-    );
-
-    res.json({
-      success: true,
-      message: 'تم حذف السجل بنجاح'
-    });
-
-  } catch (error) {
-    console.error('خطأ في حذف السجل:', error);
-    res.status(500).json({ message: 'خطأ في حذف السجل' });
-  }
-};
-
-// تصدير السجلات (للمدير فقط)
-const exportLogs = async (req, res) => {
-  try {
-    const { format = 'json', dateFrom, dateTo, activityType } = req.query;
+    const { dateFrom, dateTo } = req.query;
 
     let whereConditions = [];
     let queryParams = [];
 
     if (dateFrom) {
-      whereConditions.push(`DATE(al.CreatedAt) >= ?`);
+      whereConditions.push('DATE(CreatedAt) >= ?');
       queryParams.push(dateFrom);
     }
 
     if (dateTo) {
-      whereConditions.push(`DATE(al.CreatedAt) <= ?`);
+      whereConditions.push('DATE(CreatedAt) <= ?');
       queryParams.push(dateTo);
     }
 
-    if (activityType) {
-      whereConditions.push(`al.ActivityType = ?`);
-      queryParams.push(activityType);
-    }
+    const whereClause = whereConditions.length > 0 
+      ? 'WHERE ' + whereConditions.join(' AND ') 
+      : '';
 
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    // إحصائيات حسب نوع النشاط
+    const [actionStats] = await pool.execute(`
+      SELECT Action, COUNT(*) as count
+      FROM activitylogs
+      ${whereClause}
+      GROUP BY Action
+      ORDER BY count DESC
+    `, queryParams);
 
-    const [logs] = await pool.execute(
-      `SELECT al.LogID, al.Username, e.FullName as EmployeeName, al.ActivityType, 
-              al.Description, al.IPAddress, al.CreatedAt
-       FROM ActivityLogs al
-       LEFT JOIN Employees e ON al.EmployeeID = e.EmployeeID
-       ${whereClause}
-       ORDER BY al.CreatedAt DESC`,
-      queryParams
-    );
+    // إحصائيات حسب المستخدم
+    const [userStats] = await pool.execute(`
+      SELECT u.FullName, u.Username, COUNT(al.LogID) as count
+      FROM activitylogs al
+      LEFT JOIN users u ON al.ActorUserID = u.UserID
+      ${whereClause}
+      GROUP BY al.ActorUserID, u.FullName, u.Username
+      ORDER BY count DESC
+      LIMIT 10
+    `, queryParams);
 
-    // تسجيل نشاط التصدير
-    await logActivity(
-      req.user.employeeID,
-      req.user.username,
-      'export_logs',
-      `تم تصدير ${logs.length} سجل بصيغة ${format}`,
-      req.ip,
-      req.get('User-Agent')
-    );
+    // إحصائيات يومية للأسبوع الماضي
+    const [dailyStats] = await pool.execute(`
+      SELECT DATE(CreatedAt) as date, COUNT(*) as count
+      FROM activitylogs
+      WHERE CreatedAt >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+      GROUP BY DATE(CreatedAt)
+      ORDER BY date DESC
+    `);
 
-    if (format === 'csv') {
-      // تصدير CSV
-      const csv = convertToCSV(logs);
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', 'attachment; filename=activity-logs.csv');
-      res.send(csv);
-    } else {
-      // تصدير JSON
-      res.json({
-        success: true,
-        data: logs,
-        exportDate: new Date().toISOString(),
-        totalRecords: logs.length
-      });
-    }
+    res.json({
+      success: true,
+      data: {
+        byAction: actionStats,
+        byUser: userStats,
+        daily: dailyStats
+      }
+    });
 
   } catch (error) {
-    console.error('خطأ في تصدير السجلات:', error);
-    res.status(500).json({ message: 'خطأ في تصدير السجلات' });
+    console.error('خطأ في جلب إحصائيات النشاط:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
   }
 };
 
-// تحويل البيانات إلى CSV
+// جلب أنواع الأنشطة المتاحة
+const getActivityTypes = async (req, res) => {
+  try {
+    const [types] = await pool.execute(`
+      SELECT DISTINCT Action
+      FROM activitylogs
+      ORDER BY Action
+    `);
+
+    res.json({
+      success: true,
+      data: types.map(type => type.Action)
+    });
+
+  } catch (error) {
+    console.error('خطأ في جلب أنواع الأنشطة:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
+  }
+};
+
+// حذف سجلات النشاط القديمة
+const cleanupOldLogs = async (req, res) => {
+  try {
+    const { daysOld = 90 } = req.body;
+
+    const [result] = await pool.execute(`
+      DELETE FROM activitylogs 
+      WHERE CreatedAt < DATE_SUB(NOW(), INTERVAL ? DAY)
+    `, [daysOld]);
+
+    await logActivity(req.user.UserID, null, 'LOGS_CLEANUP', {
+      deletedRows: result.affectedRows,
+      daysOld
+    });
+
+    res.json({
+      success: true,
+      message: `تم حذف ${result.affectedRows} سجل قديم`,
+      deletedRows: result.affectedRows
+    });
+
+  } catch (error) {
+    console.error('خطأ في تنظيف السجلات:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
+  }
+};
+
+// تصدير سجلات النشاط
+const exportLogs = async (req, res) => {
+  try {
+    const { 
+      format = 'json', 
+      dateFrom, 
+      dateTo, 
+      action, 
+      userID 
+    } = req.query;
+
+    let whereConditions = [];
+    let queryParams = [];
+
+    if (action) {
+      whereConditions.push('al.Action = ?');
+      queryParams.push(action);
+    }
+
+    if (userID) {
+      whereConditions.push('(al.ActorUserID = ? OR al.EffectiveUserID = ?)');
+      queryParams.push(userID, userID);
+    }
+
+    if (dateFrom) {
+      whereConditions.push('DATE(al.CreatedAt) >= ?');
+      queryParams.push(dateFrom);
+    }
+
+    if (dateTo) {
+      whereConditions.push('DATE(al.CreatedAt) <= ?');
+      queryParams.push(dateTo);
+    }
+
+    const whereClause = whereConditions.length > 0 
+      ? 'WHERE ' + whereConditions.join(' AND ') 
+      : '';
+
+    const query = `
+      SELECT al.LogID, al.Action, al.Details, al.CreatedAt,
+             actor.FullName as ActorName, actor.Username as ActorUsername,
+             effective.FullName as EffectiveName, effective.Username as EffectiveUsername
+      FROM activitylogs al
+      LEFT JOIN users actor ON al.ActorUserID = actor.UserID
+      LEFT JOIN users effective ON al.EffectiveUserID = effective.UserID
+      ${whereClause}
+      ORDER BY al.CreatedAt DESC
+      LIMIT 10000
+    `;
+
+    const [logs] = await pool.execute(query, queryParams);
+
+    const processedLogs = logs.map(log => ({
+      ...log,
+      Details: typeof log.Details === 'string' ? JSON.parse(log.Details) : log.Details
+    }));
+
+    if (format === 'csv') {
+      // تحويل إلى CSV
+      const csv = convertToCSV(processedLogs);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=activity_logs.csv');
+      res.send(csv);
+    } else {
+      // إرجاع JSON
+      res.json({
+        success: true,
+        data: processedLogs,
+        exportedAt: new Date().toISOString(),
+        totalRecords: processedLogs.length
+      });
+    }
+
+    // تسجيل عملية التصدير
+    await logActivity(req.user.UserID, null, 'LOGS_EXPORTED', {
+      format,
+      recordCount: processedLogs.length,
+      filters: { action, userID, dateFrom, dateTo }
+    });
+
+  } catch (error) {
+    console.error('خطأ في تصدير السجلات:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم'
+    });
+  }
+};
+
+// دالة مساعدة لتحويل البيانات إلى CSV
 const convertToCSV = (data) => {
   if (data.length === 0) return '';
 
-  const headers = ['رقم السجل', 'اسم المستخدم', 'اسم الموظف', 'نوع النشاط', 'الوصف', 'عنوان IP', 'تاريخ الإنشاء'];
-  const csvContent = [
-    headers.join(','),
-    ...data.map(row => [
-      row.LogID,
-      `"${row.Username || ''}"`,
-      `"${row.EmployeeName || ''}"`,
-      `"${row.ActivityType || ''}"`,
-      `"${row.Description || ''}"`,
-      `"${row.IPAddress || ''}"`,
-      `"${row.CreatedAt || ''}"`
-    ].join(','))
-  ].join('\n');
+  const headers = Object.keys(data[0]);
+  const csvHeaders = headers.join(',');
+  
+  const csvRows = data.map(row => 
+    headers.map(header => {
+      const value = row[header];
+      if (typeof value === 'object') {
+        return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
+      }
+      return `"${String(value).replace(/"/g, '""')}"`;
+    }).join(',')
+  );
 
-  return csvContent;
+  return [csvHeaders, ...csvRows].join('\n');
 };
-
-// تهيئة جدول ActivityLogs عند بدء التشغيل
-createActivityLogsTable();
 
 module.exports = {
   checkUserPermissions,
   checkAdminPermissions,
   logActivity,
-  getAllLogs,
-  deleteOldLogs,
-  deleteLog,
+  getActivityLogs,
+  getActivityStats,
+  getActivityTypes,
+  cleanupOldLogs,
   exportLogs
-}; 
+};

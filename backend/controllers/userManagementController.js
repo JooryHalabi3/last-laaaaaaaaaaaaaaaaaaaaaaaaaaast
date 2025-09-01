@@ -1,7 +1,7 @@
 // controllers/userManagementController.js
 const pool = require('../config/database');
-const jwt = require('jsonwebtoken');
-
+const bcrypt = require('bcryptjs');
+const { logActivity } = require('./logsController');
 
 // GET /api/users?page=1&limit=10&search=&roleId=&deptId=
 exports.listUsers = async (req, res) => {
@@ -18,25 +18,27 @@ exports.listUsers = async (req, res) => {
     const args  = [];
 
     if (search) {
-      where.push(`(e.FullName LIKE ? OR e.Username LIKE ? OR e.Email LIKE ? OR e.PhoneNumber LIKE ?)`);
+      where.push(`(u.FullName LIKE ? OR u.Username LIKE ? OR u.Email LIKE ? OR u.Phone LIKE ?)`);
       const s = `%${search}%`;
       args.push(s, s, s, s);
     }
-    if (roleId) { where.push(`e.RoleID = ?`); args.push(roleId); }
-    if (deptId) { where.push(`e.DepartmentID = ?`); args.push(deptId); }
+    if (roleId) { where.push(`u.RoleID = ?`); args.push(roleId); }
+    if (deptId) { where.push(`u.DepartmentID = ?`); args.push(deptId); }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const [rows] = await pool.query(
       `
-      SELECT e.EmployeeID, e.FullName, e.Username, e.Email, e.PhoneNumber,
-             e.RoleID, r.RoleName,
-             e.DepartmentID, d.DepartmentName
-      FROM employees e
-      LEFT JOIN roles r ON e.RoleID = r.RoleID
-      LEFT JOIN departments d ON e.DepartmentID = d.DepartmentID
+      SELECT u.UserID, u.FullName, u.Username, u.Email, u.Phone,
+             u.NationalID, u.EmployeeNumber, u.IsActive,
+             u.RoleID, r.RoleName,
+             u.DepartmentID, d.DepartmentName,
+             u.CreatedAt, u.UpdatedAt
+      FROM users u
+      LEFT JOIN roles r ON u.RoleID = r.RoleID
+      LEFT JOIN departments d ON u.DepartmentID = d.DepartmentID
       ${whereSql}
-      ORDER BY e.EmployeeID DESC
+      ORDER BY u.UserID DESC
       LIMIT ? OFFSET ?
       `,
       [...args, limit, offset]
@@ -45,7 +47,7 @@ exports.listUsers = async (req, res) => {
     const [[{ total }]] = await pool.query(
       `
       SELECT COUNT(*) AS total
-      FROM employees e
+      FROM users u
       ${whereSql}
       `,
       args
@@ -58,185 +60,383 @@ exports.listUsers = async (req, res) => {
         page,
         limit,
         total,
-        totalPages: Math.max(Math.ceil(total / limit), 1),
-      },
+        totalPages: Math.ceil(total / limit)
+      }
     });
   } catch (err) {
     console.error('listUsers error:', err);
-    res.status(500).json({ success: false, message: 'Error fetching users', error: err.message });
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
   }
 };
 
-// GET /api/users/stats
-exports.getStats = async (_req, res) => {
+// POST /api/users
+exports.createUser = async (req, res) => {
   try {
-    const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM employees`);
-    const [[{ superAdmins }]] = await pool.query(`SELECT COUNT(*) AS superAdmins FROM employees WHERE RoleID = 1`);
-    const [[{ admins }]] = await pool.query(`SELECT COUNT(*) AS admins FROM employees WHERE RoleID = 3`);
-    const [[{ employees }]] = await pool.query(`SELECT COUNT(*) AS employees FROM employees WHERE RoleID = 2`);
+    const { 
+      fullName, 
+      username, 
+      email, 
+      phone, 
+      nationalID, 
+      employeeNumber, 
+      password, 
+      roleID, 
+      departmentID 
+    } = req.body;
 
-    res.json({
-      success: true,
-      data: { total, superAdmins, admins, employees },
-    });
-  } catch (err) {
-    console.error('getStats error:', err);
-    res.status(500).json({ success: false, message: 'Error fetching stats', error: err.message });
-  }
-};
-
-// PUT /api/users/:id - تحديث بيانات المستخدم
-exports.updateUser = async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    const { FullName, Email, RoleID, DepartmentID } = req.body;
-
-    // التحقق من صحة البيانات
-    if (!FullName || !Email) {
-      return res.status(400).json({ success: false, message: 'الاسم والبريد الإلكتروني مطلوبان' });
+    // التحقق من البيانات المطلوبة
+    if (!fullName || !username || !email || !phone || !nationalID || 
+        !employeeNumber || !password || !roleID) {
+      return res.status(400).json({
+        success: false,
+        message: 'جميع البيانات الأساسية مطلوبة'
+      });
     }
 
-    if (RoleID && ![1,2,3].includes(Number(RoleID))) {
-      return res.status(400).json({ success: false, message: 'الدور غير صالح' });
+    // التحقق من عدم تكرار البيانات الفريدة
+    const [existing] = await pool.query(
+      `SELECT UserID FROM users 
+       WHERE Username = ? OR Email = ? OR Phone = ? OR NationalID = ? OR EmployeeNumber = ?`,
+      [username, email, phone, nationalID, employeeNumber]
+    );
+
+    if (existing.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'يوجد مستخدم بنفس اسم المستخدم، البريد الإلكتروني، رقم الهاتف، الهوية الوطنية، أو رقم الموظف'
+      });
+    }
+
+    // تشفير كلمة المرور
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // إنشاء المستخدم
+    const [result] = await pool.query(
+      `INSERT INTO users (FullName, Username, Email, Phone, NationalID, EmployeeNumber, 
+                         PasswordHash, RoleID, DepartmentID, IsActive) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [fullName, username, email, phone, nationalID, employeeNumber, 
+       hashedPassword, roleID, departmentID]
+    );
+
+    // تسجيل النشاط
+    await logActivity(req.user.UserID, result.insertId, 'USER_CREATED', {
+      fullName, username, email, roleID, departmentID
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'تم إنشاء المستخدم بنجاح',
+      data: { UserID: result.insertId }
+    });
+
+  } catch (err) {
+    console.error('createUser error:', err);
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+  }
+};
+
+// PUT /api/users/:id
+exports.updateUser = async (req, res) => {
+  try {
+    const userID = parseInt(req.params.id, 10);
+    const { 
+      fullName, 
+      username, 
+      email, 
+      phone, 
+      nationalID, 
+      employeeNumber, 
+      roleID, 
+      departmentID, 
+      isActive 
+    } = req.body;
+
+    // التحقق من وجود المستخدم
+    const [existingUser] = await pool.query(
+      'SELECT UserID, FullName FROM users WHERE UserID = ?',
+      [userID]
+    );
+
+    if (existingUser.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'المستخدم غير موجود'
+      });
+    }
+
+    // التحقق من عدم تكرار البيانات الفريدة مع مستخدمين آخرين
+    if (username || email || phone || nationalID || employeeNumber) {
+      const [duplicates] = await pool.query(
+        `SELECT UserID FROM users 
+         WHERE (Username = ? OR Email = ? OR Phone = ? OR NationalID = ? OR EmployeeNumber = ?) 
+         AND UserID != ?`,
+        [username || '', email || '', phone || '', nationalID || '', employeeNumber || '', userID]
+      );
+
+      if (duplicates.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: 'البيانات متكررة مع مستخدم آخر'
+        });
+      }
     }
 
     // تحديث البيانات
-    const updateFields = [];
-    const updateValues = [];
+    const updates = [];
+    const values = [];
 
-    if (FullName) {
-      updateFields.push('FullName = ?');
-      updateValues.push(FullName);
-    }
-    if (Email) {
-      updateFields.push('Email = ?');
-      updateValues.push(Email);
-    }
-    if (RoleID) {
-      updateFields.push('RoleID = ?');
-      updateValues.push(Number(RoleID));
-    }
-    if (DepartmentID !== undefined) {
-      updateFields.push('DepartmentID = ?');
-      updateValues.push(DepartmentID || null);
+    if (fullName) { updates.push('FullName = ?'); values.push(fullName); }
+    if (username) { updates.push('Username = ?'); values.push(username); }
+    if (email) { updates.push('Email = ?'); values.push(email); }
+    if (phone) { updates.push('Phone = ?'); values.push(phone); }
+    if (nationalID) { updates.push('NationalID = ?'); values.push(nationalID); }
+    if (employeeNumber) { updates.push('EmployeeNumber = ?'); values.push(employeeNumber); }
+    if (roleID) { updates.push('RoleID = ?'); values.push(roleID); }
+    if (departmentID !== undefined) { updates.push('DepartmentID = ?'); values.push(departmentID); }
+    if (isActive !== undefined) { updates.push('IsActive = ?'); values.push(isActive ? 1 : 0); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'لا توجد بيانات للتحديث'
+      });
     }
 
-    updateFields.push('UpdatedAt = NOW()');
-    updateValues.push(id);
+    updates.push('UpdatedAt = CURRENT_TIMESTAMP');
+    values.push(userID);
 
     await pool.query(
-      `UPDATE employees SET ${updateFields.join(', ')} WHERE EmployeeID = ?`,
-      updateValues
+      `UPDATE users SET ${updates.join(', ')} WHERE UserID = ?`,
+      values
     );
 
-    res.json({ success: true, message: 'تم تحديث بيانات المستخدم بنجاح' });
+    // تسجيل النشاط
+    await logActivity(req.user.UserID, userID, 'USER_UPDATED', req.body);
+
+    res.json({
+      success: true,
+      message: 'تم تحديث المستخدم بنجاح'
+    });
+
   } catch (err) {
     console.error('updateUser error:', err);
-    res.status(500).json({ success: false, message: 'خطأ في تحديث بيانات المستخدم', error: err.message });
-  }
-};
-
-// PUT /api/users/:id/role  { roleId }
-exports.updateUserRole = async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    const { roleId } = req.body;
-    if (![1,2,3].includes(Number(roleId))) {
-      return res.status(400).json({ success: false, message: 'roleId غير صالح' });
-    }
-
-    await pool.query(`UPDATE employees SET RoleID = ?, UpdatedAt = NOW(), UpdatedBy = ? WHERE EmployeeID = ?`,
-      [roleId, req.user?.EmployeeID || null, id]);
-
-    res.json({ success: true, message: 'تم تحديث الدور بنجاح' });
-  } catch (err) {
-    console.error('updateUserRole error:', err);
-    res.status(500).json({ success: false, message: 'Error updating role', error: err.message });
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
   }
 };
 
 // DELETE /api/users/:id
 exports.deleteUser = async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    await pool.query(`DELETE FROM employees WHERE EmployeeID = ?`, [id]);
-    res.json({ success: true, message: 'تم حذف المستخدم' });
+    const userID = parseInt(req.params.id, 10);
+
+    // التحقق من وجود المستخدم
+    const [existingUser] = await pool.query(
+      'SELECT UserID, FullName, Username FROM users WHERE UserID = ?',
+      [userID]
+    );
+
+    if (existingUser.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'المستخدم غير موجود'
+      });
+    }
+
+    // منع حذف المستخدم الحالي
+    if (userID === req.user.UserID) {
+      return res.status(400).json({
+        success: false,
+        message: 'لا يمكنك حذف نفسك'
+      });
+    }
+
+    // حذف المستخدم (تعطيل بدلاً من الحذف الفعلي)
+    await pool.query(
+      'UPDATE users SET IsActive = 0, UpdatedAt = CURRENT_TIMESTAMP WHERE UserID = ?',
+      [userID]
+    );
+
+    // تسجيل النشاط
+    await logActivity(req.user.UserID, userID, 'USER_DELETED', {
+      deletedUser: existingUser[0]
+    });
+
+    res.json({
+      success: true,
+      message: 'تم حذف المستخدم بنجاح'
+    });
+
   } catch (err) {
     console.error('deleteUser error:', err);
-    res.status(500).json({ success: false, message: 'Error deleting user', error: err.message });
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
   }
 };
 
-// POST /api/users/impersonate/:id  { reason? }
-
-exports.impersonateUser = async (req, res) => {
+// GET /api/users/:id
+exports.getUserById = async (req, res) => {
   try {
-    if (req.user.RoleID !== 1) {
-      return res.status(403).json({ success: false, message: 'السماح للسوبر أدمن فقط' });
-    }
+    const userID = parseInt(req.params.id, 10);
 
-    const targetId = parseInt(req.params.id, 10);
-    const reason = (req.body?.reason || '').slice(0, 500);
-
-    await pool.query(
-      `INSERT INTO impersonations (SuperAdminID, TargetEmployeeID, Reason) VALUES (?, ?, ?)`,
-      [req.user.EmployeeID, targetId, reason || null]
+    const [rows] = await pool.query(
+      `SELECT u.UserID, u.FullName, u.Username, u.Email, u.Phone,
+              u.NationalID, u.EmployeeNumber, u.IsActive,
+              u.RoleID, r.RoleName,
+              u.DepartmentID, d.DepartmentName,
+              u.CreatedAt, u.UpdatedAt
+       FROM users u
+       LEFT JOIN roles r ON u.RoleID = r.RoleID
+       LEFT JOIN departments d ON u.DepartmentID = d.DepartmentID
+       WHERE u.UserID = ?`,
+      [userID]
     );
 
-    // اجلب بيانات الهدف (موظف أو أدمن)
-    const [[target]] = await pool.query(
-      `SELECT EmployeeID, FullName, Username, Email, RoleID, DepartmentID
-       FROM employees WHERE EmployeeID = ? LIMIT 1`,
-      [targetId]
-    );
-    if (!target) {
-      return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'المستخدم غير موجود'
+      });
     }
 
-    // (اختياري) منع التقمص إلى سوبر أدمن آخر
-    if (Number(target.RoleID) === 1) {
-      return res.status(403).json({ success:false, message:'لا يمكن التقمص إلى Super Admin' });
-    }
-
-    // جهّز توكن بهوية الهدف
-    const token = jwt.sign(
-      {
-        EmployeeID: target.EmployeeID,
-        Username: target.Username,
-        RoleID: target.RoleID,
-        DepartmentID: target.DepartmentID
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '2h' }
-    );
-
-    // (لو تستخدم سيشن، ممكن تترك السطرين الحاليين كما هم)
-    req.session = req.session || {};
-    req.session.impersonatedUser = targetId;
-
-    return res.json({
+    res.json({
       success: true,
-      message: 'تم تفعيل السويتش يوزر',
-      impersonating: targetId,
-      token,
-      user: target
+      data: rows[0]
     });
+
   } catch (err) {
-    console.error('impersonateUser error:', err);
-    res.status(500).json({ success: false, message: 'Error impersonating user', error: err.message });
+    console.error('getUserById error:', err);
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
   }
 };
 
-
-// POST /api/users/impersonate/end
-exports.endImpersonation = async (req, res) => {
+// PUT /api/users/:id/password
+exports.changeUserPassword = async (req, res) => {
   try {
-    req.session = req.session || {};
-    req.session.impersonatedUser = null;
-    await pool.query(`UPDATE impersonations SET EndedAt = NOW() WHERE EndedAt IS NULL`);
-    res.json({ success: true, message: 'تم إنهاء السويتش يوزر' });
+    const userID = parseInt(req.params.id, 10);
+    const { newPassword } = req.body;
+
+    if (!newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'كلمة المرور الجديدة مطلوبة'
+      });
+    }
+
+    // التحقق من وجود المستخدم
+    const [existingUser] = await pool.query(
+      'SELECT UserID, FullName FROM users WHERE UserID = ?',
+      [userID]
+    );
+
+    if (existingUser.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'المستخدم غير موجود'
+      });
+    }
+
+    // تشفير كلمة المرور الجديدة
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // تحديث كلمة المرور
+    await pool.query(
+      'UPDATE users SET PasswordHash = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE UserID = ?',
+      [hashedPassword, userID]
+    );
+
+    // تسجيل النشاط
+    await logActivity(req.user.UserID, userID, 'USER_PASSWORD_CHANGED', {
+      targetUser: existingUser[0].FullName
+    });
+
+    res.json({
+      success: true,
+      message: 'تم تغيير كلمة المرور بنجاح'
+    });
+
   } catch (err) {
-    console.error('endImpersonation error:', err);
-    res.status(500).json({ success: false, message: 'Error ending impersonation', error: err.message });
+    console.error('changeUserPassword error:', err);
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+  }
+};
+
+// GET /api/users/roles
+exports.getRoles = async (req, res) => {
+  try {
+    const [roles] = await pool.query(
+      'SELECT RoleID, RoleName FROM roles ORDER BY RoleID'
+    );
+
+    res.json({
+      success: true,
+      data: roles
+    });
+
+  } catch (err) {
+    console.error('getRoles error:', err);
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+  }
+};
+
+// GET /api/users/departments
+exports.getDepartments = async (req, res) => {
+  try {
+    const [departments] = await pool.query(
+      'SELECT DepartmentID, DepartmentName FROM departments ORDER BY DepartmentName'
+    );
+
+    res.json({
+      success: true,
+      data: departments
+    });
+
+  } catch (err) {
+    console.error('getDepartments error:', err);
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+  }
+};
+
+// GET /api/users/stats
+exports.getUserStats = async (req, res) => {
+  try {
+    // إحصائيات المستخدمين
+    const [userStats] = await pool.query(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN IsActive = 1 THEN 1 ELSE 0 END) as active,
+        SUM(CASE WHEN IsActive = 0 THEN 1 ELSE 0 END) as inactive
+      FROM users
+    `);
+
+    // إحصائيات حسب الأدوار
+    const [roleStats] = await pool.query(`
+      SELECT r.RoleName, COUNT(u.UserID) as count
+      FROM roles r
+      LEFT JOIN users u ON r.RoleID = u.RoleID AND u.IsActive = 1
+      GROUP BY r.RoleID, r.RoleName
+      ORDER BY count DESC
+    `);
+
+    // إحصائيات حسب الأقسام
+    const [deptStats] = await pool.query(`
+      SELECT d.DepartmentName, COUNT(u.UserID) as count
+      FROM departments d
+      LEFT JOIN users u ON d.DepartmentID = u.DepartmentID AND u.IsActive = 1
+      GROUP BY d.DepartmentID, d.DepartmentName
+      ORDER BY count DESC
+    `);
+
+    res.json({
+      success: true,
+      data: {
+        users: userStats[0],
+        byRole: roleStats,
+        byDepartment: deptStats
+      }
+    });
+
+  } catch (err) {
+    console.error('getUserStats error:', err);
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
   }
 };

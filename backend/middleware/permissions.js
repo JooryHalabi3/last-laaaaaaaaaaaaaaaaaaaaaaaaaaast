@@ -15,15 +15,22 @@ const ensureReqUserOrDecode = async (req) => {
   if (!token) throw new Error('NO_TOKEN');
 
   const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+  const userID = decoded.UserID || decoded.employeeID;
+  
   const [rows] = await pool.execute(
-    `SELECT e.*, r.RoleName 
-     FROM Employees e 
-     LEFT JOIN Roles r ON r.RoleID = e.RoleID
-     WHERE e.EmployeeID = ?`,
-    [decoded.employeeID]
+    `SELECT u.*, r.RoleName 
+     FROM users u 
+     LEFT JOIN roles r ON r.RoleID = u.RoleID
+     WHERE u.UserID = ? AND u.IsActive = 1`,
+    [userID]
   );
   if (rows.length === 0) throw new Error('NO_USER');
-  return rows[0];
+  
+  // إضافة خصائص للتوافق
+  const user = rows[0];
+  user.EmployeeID = user.UserID;
+  
+  return user;
 };
 
 // يتحقق أن المستخدم "موظف" (RoleID = 2)
@@ -34,193 +41,248 @@ const checkEmployeePermissions = async (req, res, next) => {
       // سجّل محاولة وصول غير مصرح بها
       try {
         await logActivity(
-          user.EmployeeID,
-          user.Username,
-          'unauthorized_access',
-          `محاولة وصول غير مصرح: ${req.originalUrl}`,
-          req.ip,
-          req.get('User-Agent'),
+          user.UserID,
           null,
-          'employee_panel'
+          'UNAUTHORIZED_ACCESS_ATTEMPT',
+          {
+            attemptedUrl: req.originalUrl,
+            userRole: user.RoleID,
+            ip: req.ip,
+            userAgent: req.get('User-Agent')
+          }
         );
       } catch (e) { /* لا توقف الطلب بسبب اللوق */ }
 
-      return res.status(403).json({ success: false, message: 'ليس لديك صلاحية للوصول لهذه الصفحة' });
+      return res.status(403).json({ 
+        success: false, 
+        message: 'ليس لديك صلاحية للوصول لهذه الصفحة' 
+      });
     }
 
     req.user = user;
     next();
   } catch (error) {
-    const msg =
-      error.message === 'NO_TOKEN' ? 'Token مطلوب للمصادقة' :
-      error.message === 'NO_USER'  ? 'المستخدم غير موجود' : 'Token غير صالح';
-    const code = error.message === 'NO_TOKEN' || error.message === 'NO_USER' ? 401 : 403;
-    console.error('خطأ في التحقق من صلاحيات الموظف:', error);
-    return res.status(code).json({ success: false, message: msg });
+    console.error('checkEmployeePermissions error:', error);
+    if (error.message === 'NO_TOKEN') {
+      return res.status(401).json({ success: false, message: 'يجب تسجيل الدخول أولاً' });
+    }
+    if (error.message === 'NO_USER') {
+      return res.status(401).json({ success: false, message: 'المستخدم غير موجود' });
+    }
+    res.status(500).json({ success: false, message: 'خطأ في التحقق من الصلاحيات' });
   }
 };
 
-// يتحقق أن الشكوى تخص الموظف أو مسندة له
+// يتحقق من ملكية الشكوى (أن المستخدم هو منشئ الشكوى أو مكلف بها)
 const checkComplaintOwnership = async (req, res, next) => {
   try {
-    const { complaintId } = req.params;
-    const employeeId = req.user?.EmployeeID;
+    const user = await ensureReqUserOrDecode(req);
+    const complaintId = req.params.complaintId || req.params.complaintID;
 
-    const [complaints] = await pool.execute(
-      `SELECT * FROM Complaints 
-       WHERE ComplaintID = ? AND (EmployeeID = ? OR AssignedTo = ?)`,
-      [complaintId, employeeId, employeeId]
-    );
-
-    if (complaints.length === 0) {
-      try {
-        await logActivity(
-          req.user.EmployeeID,
-          req.user.Username,
-          'unauthorized_complaint_access',
-          `محاولة وصول لشكوى غير مصرح: ${complaintId}`,
-          req.ip,
-          req.get('User-Agent'),
-          complaintId,
-          'complaint'
-        );
-      } catch (e) {}
-
-      return res.status(403).json({ success: false, message: 'ليس لديك صلاحية للوصول لهذه الشكوى' });
+    if (!complaintId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'معرف الشكوى مطلوب' 
+      });
     }
 
-    req.complaint = complaints[0];
+    // التحقق من ملكية الشكوى أو التكليف بها
+    const [ownership] = await pool.execute(`
+      SELECT c.ComplaintID
+      FROM complaints c
+      LEFT JOIN complaint_assignments ca ON c.ComplaintID = ca.ComplaintID
+      WHERE c.ComplaintID = ? 
+      AND (c.CreatedBy = ? OR ca.AssignedToUserID = ?)
+    `, [complaintId, user.UserID, user.UserID]);
+
+    if (ownership.length === 0) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'ليس لديك صلاحية للوصول لهذه الشكوى' 
+      });
+    }
+
+    req.user = user;
     next();
   } catch (error) {
-    console.error('خطأ في التحقق من ملكية الشكوى:', error);
-    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
+    console.error('checkComplaintOwnership error:', error);
+    res.status(500).json({ success: false, message: 'خطأ في التحقق من ملكية الشكوى' });
   }
 };
 
-// صفحات محجوبة على الموظفين
-const checkBlockedPages = async (req, res, next) => {
-  const blockedPages = [
-  '/general-complaints.html',
-  '/dashboard.html',
-  '/dept-admin/department-management.html',
-  '/recycle-bin.html',
-  '/dept-admin/logs.html'
-];
-
-// Admin-specific pages that should only be accessible to Department Admins (RoleID=3) or Super Admins (RoleID=1)
-const adminOnlyPages = [
-  '/dept-admin/logs.html',
-  '/dept-admin/department-management.html',
-  '/superadmin/permissions.html'
-];
-
-// Pages blocked for specific roles
-const roleBlockedPages = {
-  2: [ // Employee (RoleID = 2) blocked pages
-    '/dept-admin/logs.html',
-    '/dept-admin/department-management.html',
-    '/superadmin/manage-users.html',
-    '/superadmin/permissions.html',
-    '/superadmin/logs.html'
-  ]
-};
-
-  const currentPath = req.path || req.originalUrl || '';
-  
-  // Check if user is authenticated
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  let userRole = null;
-  
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const [users] = await pool.execute('SELECT RoleID FROM employees WHERE EmployeeID = ?', [decoded.EmployeeID]);
-      if (users.length > 0) {
-        userRole = users[0].RoleID;
-      }
-    } catch (err) {
-      // Token invalid, will be handled by other middleware
-    }
-  }
-  
-  // Check admin-only pages
-  if (adminOnlyPages.some(p => currentPath.includes(p))) {
-    if (!userRole || (userRole !== 1 && userRole !== 3)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Admin privileges required.'
-      });
-    }
-  }
-  
-  // Check role-specific blocked pages
-  if (userRole && roleBlockedPages[userRole]) {
-    if (roleBlockedPages[userRole].some(p => currentPath.includes(p))) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Insufficient privileges.'
-      });
-    }
-  }
-  
-  if (blockedPages.some(p => currentPath.includes(p))) {
-    try {
-      await logActivity(
-        req.user?.EmployeeID || null,
-        req.user?.Username || null,
-        'blocked_page_access',
-        `محاولة وصول لصفحة محجوبة: ${currentPath}`,
-        req.ip,
-        req.get('User-Agent'),
-        null,
-        'page_access'
-      );
-    } catch (e) {}
-
-    return res.status(403).json({ success: false, message: 'هذه الصفحة محجوبة على الموظفين' });
-  }
-
-  next();
-};
-
-// فاكتوري لتسجيل نشاط معيّن
-const logEmployeeActivity = (activityType, description, relatedIDPath = null, relatedType = null) => {
+// تسجيل نشاط الموظف
+const logEmployeeActivity = (activityType, description, paramPath = null, paramType = null) => {
   return async (req, res, next) => {
     try {
+      const user = await ensureReqUserOrDecode(req);
+      
+      let logDescription = description;
       let relatedID = null;
-
-      // استخراج relatedID من مسار مثل "params.complaintId"
-      if (relatedIDPath) {
-        const parts = relatedIDPath.split('.');
-        let cur = req;
-        for (const p of parts) {
-          cur = cur?.[p];
-          if (cur == null) break;
+      
+      // استخراج معرف العنصر المرتبط إذا كان محدداً
+      if (paramPath && paramType) {
+        const pathParts = paramPath.split('.');
+        let value = req;
+        for (const part of pathParts) {
+          value = value[part];
         }
-        relatedID = cur ?? null;
+        relatedID = value;
+        
+        if (relatedID) {
+          logDescription += ` (${paramType}: ${relatedID})`;
+        }
       }
-
-      await logActivity(
-        req.user?.EmployeeID || null,
-        req.user?.Username || null,
-        activityType,
-        description,
-        req.ip,
-        req.get('User-Agent'),
-        relatedID,
-        relatedType
-      );
-    } catch (e) {
-      console.error('خطأ في تسجيل نشاط الموظف:', e);
-    } finally {
+      
+      // تسجيل النشاط باستخدام النظام الجديد
+      await logActivity(user.UserID, null, activityType, {
+        description: logDescription,
+        relatedType: paramType,
+        relatedID: relatedID,
+        ip: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+      
+      req.user = user;
+      next();
+    } catch (error) {
+      console.error('logEmployeeActivity error:', error);
+      // لا نوقف الطلب بسبب خطأ في التسجيل
       next();
     }
   };
 };
 
+/**
+ * التحقق من صلاحية محددة للمستخدم
+ */
+const checkPermission = (permissionCode) => {
+  return async (req, res, next) => {
+    try {
+      const user = await ensureReqUserOrDecode(req);
+
+      // السوبر أدمن لديه جميع الصلاحيات
+      if (user.RoleID === 1) {
+        req.user = user;
+        return next();
+      }
+
+      // التحقق من الصلاحية في النظام الجديد
+      const [result] = await pool.execute(`
+        SELECT 
+          CASE 
+            WHEN up.Allowed IS NOT NULL THEN up.Allowed
+            ELSE COALESCE(rp.Allowed, 0)
+          END as has_permission
+        FROM users u
+        LEFT JOIN permissions p ON p.Code = ?
+        LEFT JOIN role_permissions rp ON p.PermissionID = rp.PermissionID AND rp.RoleID = u.RoleID
+        LEFT JOIN user_permissions up ON p.PermissionID = up.PermissionID AND up.UserID = u.UserID
+        WHERE u.UserID = ?
+      `, [permissionCode, user.UserID]);
+
+      const hasPermission = result.length > 0 && result[0].has_permission === 1;
+
+      if (!hasPermission) {
+        // تسجيل محاولة وصول غير مصرح بها
+        await logActivity(user.UserID, null, 'PERMISSION_DENIED', {
+          permissionCode,
+          attemptedUrl: req.originalUrl
+        });
+
+        return res.status(403).json({
+          success: false,
+          message: 'ليس لديك صلاحية للوصول لهذه الميزة'
+        });
+      }
+
+      req.user = user;
+      next();
+    } catch (error) {
+      console.error('checkPermission error:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'خطأ في التحقق من الصلاحيات' 
+      });
+    }
+  };
+};
+
+/**
+ * التحقق من الدور مع إمكانية الوصول لأدوار متعددة
+ */
+const checkRole = (allowedRoles) => {
+  const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+  
+  return async (req, res, next) => {
+    try {
+      const user = await ensureReqUserOrDecode(req);
+      
+      if (!roles.includes(user.RoleID)) {
+        // تسجيل محاولة وصول غير مصرح بها
+        await logActivity(user.UserID, null, 'ROLE_ACCESS_DENIED', {
+          requiredRoles: roles,
+          userRole: user.RoleID,
+          attemptedUrl: req.originalUrl
+        });
+
+        return res.status(403).json({
+          success: false,
+          message: 'ليس لديك الدور المطلوب للوصول لهذه الميزة'
+        });
+      }
+
+      req.user = user;
+      next();
+    } catch (error) {
+      console.error('checkRole error:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'خطأ في التحقق من الدور' 
+      });
+    }
+  };
+};
+
+/**
+ * التحقق من أن المستخدم في نفس القسم (للمدراء)
+ */
+const checkDepartmentAccess = async (req, res, next) => {
+  try {
+    const user = await ensureReqUserOrDecode(req);
+    
+    // السوبر أدمن يمكنه الوصول لجميع الأقسام
+    if (user.RoleID === 1) {
+      req.user = user;
+      return next();
+    }
+    
+    // التحقق من وجود DepartmentID للمستخدم
+    if (!user.DepartmentID) {
+      return res.status(403).json({
+        success: false,
+        message: 'المستخدم غير مرتبط بأي قسم'
+      });
+    }
+    
+    // إضافة معلومات القسم للطلب
+    req.userDepartment = user.DepartmentID;
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('checkDepartmentAccess error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'خطأ في التحقق من صلاحية القسم' 
+    });
+  }
+};
+
 module.exports = {
+  ensureReqUserOrDecode,
   checkEmployeePermissions,
   checkComplaintOwnership,
-  checkBlockedPages,
   logEmployeeActivity,
+  checkPermission,
+  checkRole,
+  checkDepartmentAccess
 };
