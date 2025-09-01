@@ -9,12 +9,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
 </head>
 
-<body>    <div class="back-button">
-      <a href="#" onclick="goBack()">
-        <img src="/icon/Back.png" alt="Back Icon" class="back-icon" />
-        <span data-ar="عودة" data-en="Back">عودة</span>
-      </a>
-    </div>
+<body>
+  <div class="back-button">
+    <a href="#" onclick="goBack()">
+      <img src="/icon/Back.png" alt="Back Icon" class="back-icon" />
+      <span data-ar="عودة" data-en="Back">عودة</span>
+    </a>
+  </div>
+
   <!-- رأس الصفحة -->
   <header class="header">
     <div class="header-content">
@@ -26,8 +28,6 @@
       </button>
     </div>
   </header>
-
-
 
   <div class="page-header">
     <h2 class="page-title" data-ar="متابعة الشكاوى الطبية" data-en="Medical Complaint Follow-up">متابعة الشكاوى الطبية</h2>
@@ -47,17 +47,16 @@
       <form onsubmit="handleSubmit(event)">
         <div class="input-group">
           <img src="/icon/person.png" class="input-icon" />
-          <input type="text"
-       placeholder="ادخل اسم المريض الكامل"
-       data-ar-placeholder="ادخل اسم المريض الكامل"
-       data-en-placeholder="Enter Full Patient Name"
-       required />
-
+          <input id="nameInput" type="text"
+                 placeholder="ادخل اسم المريض الكامل"
+                 data-ar-placeholder="ادخل اسم المريض الكامل"
+                 data-en-placeholder="Enter Full Patient Name"
+                 required />
         </div>
 
         <div class="input-group">
           <img src="/icon/serial.png" class="input-icon" />
-          <input type="text"
+          <input id="nidInput" type="text"
                  placeholder="رقم الهوية / الإقامة"
                  data-ar-placeholder="رقم الهوية / الإقامة"
                  data-en-placeholder="ID / Residency Number"
@@ -70,40 +69,40 @@
           عرض الشكاوى
         </button>
       </form>
+
+      <!-- شريط حالة البحث (جاري البحث/لا نتائج/أخطاء) -->
+      <div id="searchState" class="state" aria-live="polite" style="margin-top:12px"></div>
+
+      <!-- حاوية النتائج (بطاقة المريض + جدول الشكاوى) -->
+      <div id="followupResults" style="margin-top:24px"></div>
     </div>
   </main>
 
   <script src="followup.js"></script>
   <script>
-  (function () {
-    // استخدمي نفس التخزين عندك: localStorage.user يحتوي RoleID
-       function redirectByRole() {
-      const user = JSON.parse(localStorage.getItem('user') || 'null');
-      if (!user) return '/login/login.html';
-      const roleId = Number(user.RoleID || user.roleId);
-      if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
-      if (roleId === 2) return '/employee/employee-home.html';   // موظف
-      if (roleId === 3) return '/dept-admin/dept-admin.html';  
-      return '/login/login.html'; // احتياطي
-    }
+    (function () {
+      function redirectByRole() {
+        const user = JSON.parse(localStorage.getItem('user') || 'null');
+        if (!user) return '/login/login.html';
+        const roleId = Number(user.RoleID || user.roleId);
+        if (roleId === 1) return '/superadmin/superadmin-home.html'; // سوبر أدمن
+        if (roleId === 2) return '/employee/employee-home.html';     // موظف
+        if (roleId === 3) return '/dept-admin/dept-admin.html';      // أدمن قسم
+        return '/login/login.html';
+      }
 
-    // كل روابط "الصفحة الرئيسية" الموجودة في الشريط الجانبي
-    const homeLinks = document.querySelectorAll(
-      'aside .sidebar-menu a.menu-link[href$="/login/login.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
-    );
+      const homeLinks = document.querySelectorAll(
+        'aside .sidebar-menu a.menu-link[href$="/login/login.html"], aside .sidebar-menu a.menu-link[data-en="Home Page"], aside .sidebar-menu a.menu-link[data-ar="الصفحة الرئيسية"]'
+      );
 
-    homeLinks.forEach(a => {
-      // خَلّي النقر يوجّه حسب الدور
-      a.addEventListener('click', (e) => {
-        e.preventDefault();
-        window.location.href = redirectByRole();
+      homeLinks.forEach(a => {
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.location.href = redirectByRole();
+        });
+        a.setAttribute('href', redirectByRole());
       });
-
-      // (اختياري) عدّلي الـ href الظاهر للـ Hover/Copy
-      a.setAttribute('href', redirectByRole());
-    });
-  })();
-</script>
-
+    })();
+  </script>
 </body>
 </html>

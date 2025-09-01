@@ -1,290 +1,346 @@
-3oun – دليل قاعدة البيانات (README)
-
-المحرك: MySQL 8
-الترميز: utf8mb4 / utf8mb4_unicode_ci
-الأدوار القياسية: 1 = SuperAdmin، 2 = Employee، 3 = Admin
-
-هذا الدليل يشرح كل جدول في قاعدة بيانات 3oun: الغرض، أهم الأعمدة، والعلاقات السريعة بين الجداول. في النهاية ستجد ملخصًا للتريغرز (Triggers) والعروض (Views) والقيود المهمة.
-
 أ) المراجع والصلاحيات (Reference & RBAC)
 1) roles
 
 الغرض: تعريف أدوار النظام.
 
-أهم الأعمدة: RoleID (PK)، RoleName.
+أهم الأعمدة:
+RoleID (PK), RoleName.
 
-ملاحظات: القيم القياسية: (1) SuperAdmin، (2) Employee، (3) Admin.
+ملاحظات: القيم القياسية: 1=SuperAdmin, 2=Employee, 3=Admin.
 
-2) hospitals
+2) departments
 
-الغرض: المستشفيات (لدعم العمل متعدد المستشفيات).
+الغرض: الأقسام داخل المستشفى.
 
-أهم الأعمدة: HospitalID (PK)، HospitalName (فريد).
+أهم الأعمدة:
+DepartmentID (PK), DepartmentName (UNIQUE), CreatedAt, UpdatedAt.
 
-علاقات: مرجع لـ departments و users وبعض جداول الاستيراد.
+فهارس/قيود: فريد على DepartmentName.
 
-3) departments
+علاقات: يُشار له من users, complaints, تصنيف الشكاوى، وبعض جداول التحليلات.
 
-الغرض: الأقسام داخل المستشفيات.
-
-أهم الأعمدة: DepartmentID (PK)، HospitalID (FK)، DepartmentName.
-
-قيود: (HospitalID, DepartmentName) فريد.
-
-علاقات: أب لسُلّم تصنيف الشكاوى (reasons → subtypes) ومرجع اختياري داخل complaints.
-
-4) users
+3) users
 
 الغرض: جميع المستخدمين (سوبر/أدمن/موظف/مريض).
 
+أهم الأعمدة (مع قيود فريدة):
+UserID (PK), FullName, Email (UNIQUE), Username (UNIQUE),
+Phone (UNIQUE, 10 أرقام), NationalID (UNIQUE, 10–15),
+EmployeeNumber (UNIQUE, ثابت لا يتغير), PasswordHash,
+RoleID (FK→roles), DepartmentID (FK→departments, NULLable), IsActive.
+
+فهارس/Checks: تحقق طول الجوال والهوية؛ فهارس ضمن القيود الفريدة.
+
+علاقات: مرجع من جداول عديدة (إسناد، ردود، إشعارات، سجلات…).
+
+4) permissions
+
+الغرض: كتالوج الصلاحيات الذرّية.
+
 أهم الأعمدة:
+PermissionID (PK), Code (UNIQUE), Label.
 
-تعريف: FullName, Email(فريد), Username(فريد), Phone(فريد و10 أرقام), NationalID(فريد و10–15 خانة), EmployeeNumber(فريد وغير قابل للتغيير).
+5) role_permissions
 
-تنظيم: RoleID (FK)، HospitalID (FK)، DepartmentID (FK)، IsActive.
+الغرض: ربط الصلاحيات بالأدوار (افتراضات).
 
-قيود: فحوصات على طول Phone وNationalID.
+أهم الأعمدة/المفاتيح:
+RoleID (FK), PermissionID (FK), Allowed TINYINT(1),
+(PK مركّب: RoleID, PermissionID).
 
-ملاحظات: يوجد تريغر يمنع تعديل EmployeeNumber بعد إنشائه + تريغر يضمن وجود سوبر واحد فقط.
+6) user_permissions
 
-5) permissions
+الغرض: تجاوزات صلاحيات على مستوى المستخدم.
 
-الغرض: كتالوج الصلاحيات الذرّية (مثل: complaint.assign, reports.export…).
-
-أهم الأعمدة: PermissionID (PK)، Code (فريد)، Label.
-
-6) role_permissions
-
-الغرض: ربط الأدوار بالصلاحيات (افتراضيًا).
-
-المفتاح: مركّب (RoleID, PermissionID).
-
-علاقات: RoleID → roles، وPermissionID → permissions.
-
-7) user_permissions
-
-الغرض: تجاوزات على مستوى المستخدم (Overrides) فوق الدور.
-
-المفتاح: مركّب (UserID, PermissionID).
-
-علاقات: UserID → users، وPermissionID → permissions.
+أهم الأعمدة/المفاتيح:
+UserID (FK), PermissionID (FK), Allowed,
+(PK مركّب: UserID, PermissionID).
 
 ب) تصنيف الشكاوى (قسم ← سبب ← نوع فرعي)
-8) complaint_reasons
+7) complaint_reasons
 
-الغرض: أسباب الشكوى لكل قسم (مطابقة للقاعدة القديمة بنفس الـ IDs).
+الغرض: أسباب الشكوى لكل قسم.
 
-أهم الأعمدة: ReasonID (PK)، DepartmentID (FK)، ReasonName.
+أهم الأعمدة:
+ReasonID (PK), DepartmentID (FK→departments), ReasonName.
 
-9) complaint_subtypes
+ملاحظة: تُستورد من القاعدة القديمة بنفس IDs.
 
-الغرض: أنواع فرعية لكل سبب (مطابقة للقديمة بنفس الـ IDs).
+8) complaint_subtypes
 
-أهم الأعمدة: SubtypeID (PK)، ReasonID (FK)، SubtypeName.
+الغرض: الأنواع الفرعية لكل سبب.
 
-ملحوظة: الشكوى ترتبط بـ SubtypeID (أدق مستوى)، ومنه نستنتج السبب والقسم.
+أهم الأعمدة:
+SubtypeID (PK), ReasonID (FK→complaint_reasons), SubtypeName.
+
+ملاحظة: تُستورد بنفس IDs القديمة.
+
+علاقة مهمة: الشكوى ترتبط بـ SubtypeID (ومنها يُستنتج السبب والقسم).
 
 ج) دورة حياة الشكاوى
-10) complaints
+9) complaints
 
 الغرض: الكيان الأساسي للشكوى.
 
 أهم الأعمدة:
+ComplaintID (PK), ComplaintNumber (UNIQUE, يولَّد تلقائيًا),
+Title, Description,
+SubtypeID (FK), DepartmentID (FK, NULLable),
+Status ENUM('open','in_progress','responded','closed'),
+Priority ENUM('low','normal','high','urgent'),
+Source ENUM('in_person','call_center'),
+PatientUserID (FK→users, NULLable), CreatedBy (FK→users, NULLable),
+CreatedAt, UpdatedAt, ClosedAt (NULLable).
 
-هوية: ComplaintID (PK)، ComplaintNumber (يتولّد تلقائيًا بصيغة YYYYMMDD-000123).
+فهارس: على Status, Priority, SubtypeID, DepartmentID, Source, CreatedAt.
 
-المحتوى: Title, Description.
+ملاحظات: ClosedAt يُضبط/يصفَّر تلقائيًا عبر التريغر عند تغيير الحالة.
 
-التصنيف: SubtypeID (FK)، DepartmentID (FK اختياري للتقارير).
+10) complaint_attachments
 
-الحالة/الأولوية: Status {open, in_progress, responded, closed}، Priority {low, normal, high, urgent}، وIsInPerson.
+الغرض: مرفقات الشكوى.
 
-الربط بالمستخدمين: PatientUserID (إن وُجد)، CreatedBy (منشئ الشكوى).
+أهم الأعمدة:
+AttachmentID (PK), ComplaintID (FK→complaints),
+FileURL, FileName, MimeType, SizeBytes,
+UploadedBy (FK→users, SET NULL), CreatedAt.
 
-التواريخ: CreatedAt, UpdatedAt.
+حذف: ON DELETE CASCADE عند حذف الشكوى.
 
-فهارس: على Status, SubtypeID, DepartmentID, CreatedAt.
+11) complaint_assignments
 
-11) complaint_attachments
+الغرض: سجلات الإسناد/إعادة الإسناد لموظف.
 
-الغرض: مرفقات الشكوى (صور/ملفات).
+أهم الأعمدة:
+AssignmentID (PK), ComplaintID (FK→complaints),
+AssignedToUserID (FK→users),
+AssignedByUserID (FK→users, SET NULL),
+Notes,
+FirstReminderAt, SecondReminderAt, EscalatedAt, ReminderCount,
+CreatedAt.
 
-أهم الأعمدة: AttachmentID، ComplaintID (FK)، FileURL، معلومات الملف.
+فهارس: على ComplaintID, AssignedToUserID, CreatedAt.
 
-12) complaint_assignments
+12) complaint_replies
 
-الغرض: إسناد/إعادة إسناد الشكوى لموظف (بواسطة الأدمن).
+الغرض: الردود على الشكوى.
 
-أهم الأعمدة: AssignedToUserID (الموظف)، AssignedByUserID (الأدمن – يسمح NULL عند حذف الأدمن)، ملاحظات الإسناد.
+أهم الأعمدة:
+ReplyID (PK), ComplaintID (FK→complaints),
+AuthorUserID (FK→users, SET NULL),
+Body, AttachmentURL, CreatedAt.
 
-حقول SLA: FirstReminderAt, SecondReminderAt, EscalatedAt, ReminderCount.
+فهارس: على ComplaintID, CreatedAt.
 
-علاقات: ComplaintID → complaints، AssignedToUserID/AssignedByUserID → users.
+13) complaint_history
 
-13) complaint_replies
+الغرض: سجل تغييرات الحقول المهمة.
 
-الغرض: الردود (سلسلة نقاش) على الشكوى.
+أهم الأعمدة:
+HistoryID (PK), ComplaintID (FK→complaints),
+ActorUserID (FK→users, SET NULL),
+PrevStatus, NewStatus,
+FieldChanged, OldValue, NewValue,
+CreatedAt.
 
-أهم الأعمدة: ComplaintID (FK)، AuthorUserID (يسمح NULL عند حذف الكاتب)، Body, AttachmentURL, CreatedAt.
-
-14) complaint_history
-
-الغرض: سجل تغييرات الحقول المهمة (الحالة/القسم/الأولوية/…).
-
-أهم الأعمدة: ComplaintID، ActorUserID (من نفّذ)، PrevStatus, NewStatus, FieldChanged, OldValue, NewValue, CreatedAt.
-
-ملاحظات: يُحدَّث تلقائيًا بتريغر عند تغيير الشكوى + أحداث من التطبيق.
+ملاحظة: يُملأ تلقائيًا بتريغرز + أحداث من التطبيق.
 
 د) الإشعارات والسجلات وكلمات المرور
-15) notifications
+14) notifications
 
-الغرض: إشعارات للمستخدمين حسب الأحداث والصلاحيات.
+الغرض: إشعارات حسب الأحداث.
 
-أمثلة للنوع (Type):
-assign, reply, status_change, sla.first, sla.second, sla.escalation,
-delete.approve, delete.reject, reopen.request, reopen.approve, …
+أهم الأعمدة:
+NotificationID (PK), UserID (FK→users),
+Type, Title, Body, IsRead, CreatedAt.
 
-16) activitylogs
+فهارس: على UserID, IsRead, (UserID, CreatedAt).
 
-الغرض: تدقيق شامل لكل الأحداث.
+15) activitylogs
 
-أهم الأعمدة: ActorUserID (المستخدم الحقيقي)، EffectiveUserID (المُنتحل عند السويتش)، Action، Details(JSON)، CreatedAt.
+الغرض: تدقيق شامل للأحداث.
 
-17) password_resets
+أهم الأعمدة:
+LogID (PK), ActorUserID (FK→users, SET NULL),
+EffectiveUserID (FK→users, SET NULL),
+Action, Details(JSON), CreatedAt.
 
-الغرض: دعم “نسيت كلمة المرور” عبر رموز مؤقتة.
+فهارس: على ActorUserID, EffectiveUserID, CreatedAt.
 
-أهم الأعمدة: TokenHash, ExpiresAt, UsedAt.
+16) password_resets
+
+الغرض: “نسيت كلمة المرور”.
+
+أهم الأعمدة:
+ResetID (PK), UserID (FK→users),
+TokenHash (VARBINARY), ExpiresAt, UsedAt, CreatedAt.
+
+فهارس: على UserID, ExpiresAt.
 
 هـ) طلبات الحذف وإعادة فتح الشكاوى
-18) delete_requests
+17) delete_requests
 
-الغرض: سير عمل الحذف بموافقتين:
-أدمن يطلب ويؤكد → سوبر يوافق أو يرفض.
+الغرض: سير الحذف بمستويي موافقة (أدمن ثم سوبر).
 
-الحالات: pending, admin_confirmed, approved, rejected.
+أهم الأعمدة:
+RequestID (PK), TableName, RecordPK,
+RequestedBy (FK→users),
+ConfirmedByAdminAt, ApprovedBySuperAt,
+RejectedBy (FK→users, SET NULL), RejectedAt, RejectedReason,
+Status ENUM('pending','admin_confirmed','approved','rejected'),
+Snapshot(JSON), CreatedAt.
 
-أهم الأعمدة: اسم الجدول/المفتاح (TableName, RecordPK)، RequestedBy، Snapshot(JSON)، تواريخ/هوية الموافقات أو الرفض.
+18) complaint_reopen_requests
 
-19) complaint_reopen_requests
+الغرض: طلبات إعادة فتح شكوى مغلقة (الموظف يطلب، السوبر يعتمد/يرفض).
 
-الغرض: طلبات إعادة فتح الشكوى بعد إغلاقها (يرسلها الموظف، يعتمدها السوبر).
+أهم الأعمدة:
+ReopenID (PK), ComplaintID (FK→complaints),
+RequestedBy (FK→users),
+Reason,
+Status ENUM('pending','approved','rejected'),
+ApprovedBy (FK→users, SET NULL), ApprovedAt,
+RejectedBy (FK→users, SET NULL), RejectedAt, RejectedReason,
+CreatedAt.
 
-الحالات: pending, approved, rejected.
+فهارس: على ComplaintID, Status.
 
-أهم الأعمدة: ComplaintID, RequestedBy, Reason, ApprovedBy/At أو RejectedBy/At/Reason.
+و) بيانات الداشبورد التحليلية (اختياري)
+19) report_937_imports / 20) report_937_rows
 
-و) تخزين بيانات الداشبورد والتصدير
-20) report_937_imports & 21) report_937_rows
+الغرض: استيراد/عرض بلاغات 937.
 
-الغرض: استيراد/عرض بيانات بلاغات 937 مع فلاتر (تاريخ/ربع/قسم/تصنيف).
+أهم الأعمدة (imports):
+ImportID (PK), UploadedBy (FK→users), SourceFileName, FromDate, ToDate, Note, CreatedAt.
 
-ملاحظات: RowHash لمنع التكرار داخل نفس الاستيراد؛ مشتقات Year/Quarter لتسريع الاستعلام.
+أهم الأعمدة (rows):
+RowID (PK), ImportID (FK→imports, CASCADE),
+OccurredAt (+ مشتقات Year, Quarter),
+DepartmentID (FK), DepartmentName, CategoryName,
+Description, RawData(JSON), RowHash (UNIQUE per Import), CreatedAt.
 
-22) secret_visitor_imports & 23) secret_visitor_rows
+فهارس: على التاريخ/السنة/الربع/القسم/التصنيف.
 
-الغرض: تقارير الزائر السري (منفّذ/غير منفّذ) وربطها بالأقسام/الإدارات مع فلاتر.
+21) secret_visitor_imports / 22) secret_visitor_rows
 
-24) misconduct_imports & 25) misconduct_rows
+الغرض: تقارير الزائر السري.
 
-الغرض: حالات سوء التعامل (تاريخ/قسم/نوع/حالة + بيانات خام JSON).
+أهم الأعمدة (rows):
+DepartmentName, NoteText, ResponsibleDepartment,
+ExecutionStatus ENUM('executed','not_executed'),
+حقول التاريخ والمشتقات والفهارس المشابهة.
 
-26) pressganey_imports & 27) pressganey_rows
+23) misconduct_imports / 24) misconduct_rows
 
-الغرض: نتائج رضا المرضى (أسئلة/أكواد/درجات/حجم عينة + بيانات خام).
+الغرض: سوء التعامل.
 
-28) report_exports
+أهم الأعمدة (rows):
+OccurredAt, DepartmentName, IncidentType, Status, Description,
+RawData(JSON), RowHash, مشتقات التاريخ، فهارس على Status/القسم/التاريخ.
 
-الغرض: تسجيل كل عمليات التصدير (Excel/PDF) مع النطاق والأنواع المختارة، وربط الملف الناتج إن وُجد.
+25) pressganey_imports / 26) pressganey_rows
 
-ز) صفحة المميّزين
-29) featured_people
+الغرض: رضا المرضى (PressGaney).
 
-الغرض: إدارة بطاقات “الموظف/القسم المتميز” المعروضة على صفحات الهوم.
+أهم الأعمدة (rows):
+OccurredAt, DepartmentName, QuestionCode, QuestionText,
+ScoreValue, SampleSize, RawData(JSON), مشتقات التاريخ، فهارس على السؤال والقسم.
 
-أهم الأعمدة: PersonName, EmployeeUserID (اختياري)، Title, PhotoURL, Bio, نطاق (HospitalID/DepartmentID)، فترة (FeaturedFrom/To)، حالة (IsActive)، AddedBy, ApprovedBy.
+27) report_exports
 
-صلاحيات: featured.manage (سوبر)، ويمكن منح featured.add لأدمن محدد للإضافة ضمن نطاقه.
+الغرض: تتبّع كل عمليات التصدير (Excel/PDF).
 
-التريغرز (Triggers)
+أهم الأعمدة:
+ExportID (PK), RequestedBy (FK→users),
+Format ENUM('Excel','PDF'),
+FromDate, ToDate, DataTypes(JSON), ResultFileURL, CreatedAt.
 
-trg_complaints_after_insert
-توليد رقم الشكوى ComplaintNumber بصيغة YYYYMMDD-000123 بعد الإدراج.
+ز) المميّزون
+28) featured_people
 
-trg_complaints_after_update
-تسجيل تغييرات الحالة/القسم/الأولوية تلقائيًا في complaint_history.
+الغرض: بطاقات “المميّزين” المعروضة في الهوم.
 
-trg_users_block_empno_update
-منع تعديل رقم الموظف EmployeeNumber بعد إنشائه (قيمة ثابتة).
+أهم الأعمدة:
+FeaturedID (PK), PersonName, EmployeeUserID (FK→users, SET NULL),
+Title, PhotoURL, Bio,
+DepartmentID (FK→departments, SET NULL),
+FeaturedFrom, FeaturedTo, IsActive,
+AddedBy (FK→users), ApprovedBy (FK→users, SET NULL),
+الطوابع الزمنية.
 
-trg_single_superadmin_insert / trg_single_superadmin_update
-ضمان وجود سوبر أدمن واحد فقط في النظام.
+صلاحيات مقترحة:
+featured.manage (سوبر)، و featured.add (قد تُمنح لأدمن معيّن للإضافة فقط).
 
-trg_users_validate_insert / trg_users_validate_update
-تحقق إضافي من رقم الجوال (10 أرقام) وطول الهوية/الإقامة (10–15).
+ح) العروض (Views) المهمة
+1) v_department_complaint_counts
 
-العروض (Views)
+الغرض: ملخص عدادات الشكاوى لكل قسم (إجمالي/مفتوحة/قيد المعالجة/مستجابة/مغلقة).
 
-v_department_complaint_counts
-ملخص أعداد الشكاوى لكل قسم: إجمالي/مفتوحة/قيد المعالجة/مستجابة/مغلقة.
+2) v_complaints_enriched (محدّث بالنوع ووقت الإغلاق)
 
-v_complaints_enriched
-عرض مُثْرى يربط الشكوى مع Subtype → Reason → Department لتسهيل الاستعلامات والتقارير.
+الغرض: عرض مُثْرى يربط الشكوى بـ Subtype → Reason → Department ويضيف Source, ClosedAt.
 
-القيود والفهارس المهمة (Highlights)
+3) لوحات حسب نوع الشكوى:
 
-Uniq:
+v_source_counts_daily: عدادات يومية لكل نوع (مع تفاصيل الحالات).
 
-users.Email, users.Phone, users.NationalID, users.EmployeeNumber, users.Username
+v_source_dept_counts: تجميع حسب القسم + النوع.
 
-hospitals.HospitalName
+v_source_duration_stats: إحصاءات مدة الإنجاز لكل نوع (متوسط/أدنى/أقصى).
 
-(departments.HospitalID, DepartmentName)
+v_complaint_durations: تفاصيل المدة بالساعة/اليوم لكل شكوى.
 
-permissions.Code
+v_source_detail_rows: قائمة تفاصيل موحدة لصفحة التفاصيل.
+
+ط) التريغرز (Triggers)
+
+trg_complaints_after_insert: توليد ComplaintNumber بصيغة YYYYMMDD-000123.
+
+trg_complaints_after_update (مُحدَّث):
+
+تسجيل تغييرات الحالة/القسم/الأولوية في complaint_history.
+
+ضبط ClosedAt عند الانتقال إلى closed وتصفيره عند الخروج منها.
+
+trg_users_block_empno_update: منع تعديل EmployeeNumber بعد الإنشاء.
+
+trg_single_superadmin_insert / trg_single_superadmin_update: ضمان سوبر واحد فقط.
+
+trg_users_validate_insert / trg_users_validate_update: تحقق من 10 أرقام للجوال و10–15 للهوية/الإقامة.
+
+ي) ملاحظات وقيود مهمة
+
+فريد (UNIQUE):
+users.Email, users.Phone, users.NationalID, users.EmployeeNumber, users.Username,
+departments.DepartmentName, permissions.Code.
 
 Checks:
+Phone يطابق ^[0-9]{10}$، طول NationalID بين 10 و15.
 
-Phone يطابق ^[0-9]{10}$
+فهارس أداء:
+complaints(Status, Priority, SubtypeID, DepartmentID, Source, CreatedAt)،
+complaint_assignments(ComplaintID, AssignedToUserID, CreatedAt)،
+notifications(UserID, CreatedAt)، activitylogs(ActorUserID, EffectiveUserID, CreatedAt)،
+مشتقات التاريخ (Year/Quarter) في جداول التحليل.
 
-طول NationalID بين 10 و15
+ك) منطق تذكيرات SLA (3/6/9 أيام)
 
-Indexes:
+يبدأ العدّ من أحدث سجل في complaint_assignments.CreatedAt.
 
-complaints(Status, SubtypeID, DepartmentID, CreatedAt)
+بدون رد/تحديث من الموظف المُسنَد:
 
-complaint_assignments(ComplaintID, AssignedToUserID)
+اليوم 3: sla.first إلى الموظف.
 
-تواريخ الإنشاء في notifications وactivitylogs؛ فهارس سنة/ربع للجداول التحليلية.
+اليوم 6: sla.second إلى الموظف.
 
-إشعارات SLA (3/6/9 أيام) – منطق مختصر
+اليوم 9: sla.escalation إلى الموظف + الأدمن + السوبر.
 
-يبدأ العدّ من وقت الإسناد في complaint_assignments.
+أي رد/تغيير حالة من الموظف يُصفّر العدّ.
 
-بدون أي رد/تحديث من الموظف المُسنَد إليه:
+ل) استيراد التصنيفات من القاعدة القديمة
 
-اليوم 3: إشعار للموظف (sla.first).
-
-اليوم 6: إشعار ثانٍ للموظف (sla.second).
-
-اليوم 9: تصعيد للأدمن + السوبر + الموظف (sla.escalation).
-
-أي رد/تحديث من الموظف يعيد العدّ ويوقف التذكيرات تلقائيًا.
-
-استيراد التصنيفات من القاعدة القديمة
-
-يجب استيراد الأقسام/الأسباب/الأنواع الفرعية بنفس المعرفات (IDs) لضمان التطابق:
+يجب استيراد الأسباب/الأنواع الفرعية بنفس IDs (وبحسب أقسامك الحالية) لضمان التطابق:
 
 complaint_reasons(ReasonID, DepartmentID, ReasonName)
 
 complaint_subtypes(SubtypeID, ReasonID, SubtypeName)
-
-ملاحظات ختامية
-
-تم تصميم الجداول لتغطي: إدارة الشكاوى كاملة، الإسناد، التاريخ، الإشعارات، الداشبورد، التصدير، سير عمل الحذف، وإعادة فتح الشكاوى.
-
-أعمدة مثل AssignedByUserID وAuthorUserID تسمح بـ NULL عند الحذف (لتفادي أخطاء FK مع ON DELETE SET NULL).
-
-منع تغيير EmployeeNumber يتم بتريغر + تحقق في الباك.
-
-السوبر أدمن هو الوحيد المخوّل بإدارة الصلاحيات وتغيير الأدوار واعتماد الحذف وإعادة فتح الشكاوى.
