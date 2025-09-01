@@ -1,5 +1,5 @@
 // Department Admin JavaScript
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'http://127.0.0.1:3001/api';
 
 let currentLang = localStorage.getItem('lang') || 'ar';
 let currentUser = null;
@@ -377,17 +377,17 @@ function displayDepartmentEmployees() {
     const roleClass = employee.RoleName === 'EMPLOYEE' ? 'role-employee' : 'role-admin';
 
     row.innerHTML = `
-      <td>${employee.EmployeeID}</td>
+      <td>${employee.UserID || employee.EmployeeID}</td>
       <td>${employee.FullName || '-'}</td>
       <td>${employee.Email || '-'}</td>
       <td>${employee.DepartmentName || '-'}</td>
       <td><span class="role-badge ${roleClass}">${employee.RoleName}</span></td>
       <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-      <td>${employee.PhoneNumber || '-'}</td>
+      <td>${employee.Phone || employee.PhoneNumber || '-'}</td>
       <td>${employee.Username || '-'}</td>
       <td class="table-actions">
-        <button class="btn-edit" onclick="editEmployee(${employee.EmployeeID})" data-ar="تعديل" data-en="Edit">Edit</button>
-        <button class="btn-assign" onclick="manageEmployeePermissions(${employee.EmployeeID})" data-ar="الصلاحيات" data-en="Permissions">Permissions</button>
+        <button class="btn-edit" onclick="editEmployee(${employee.UserID || employee.EmployeeID})" data-ar="تعديل" data-en="Edit">Edit</button>
+        <button class="btn-assign" onclick="manageEmployeePermissions(${employee.UserID || employee.EmployeeID})" data-ar="الصلاحيات" data-en="Permissions">Permissions</button>
       </td>
     `;
     tbody.appendChild(row);

@@ -1,41 +1,78 @@
 const express = require('express');
 const router = express.Router();
-const complaintController = require('../controllers/complaintController');
+const { authenticateToken, requireAnyRole, requirePermission } = require('../middleware/auth');
+const {
+    upload,
+    getDepartments,
+    getComplaintReasons,
+    getSubTypes,
+    createComplaint,
+    getAllComplaints,
+    getComplaintById,
+    updateComplaintStatus,
+    assignComplaint,
+    addReply,
+    getComplaintStats,
+    searchComplaints
+} = require('../controllers/complaintController');
 
-// جلب جميع الشكاوى (مع التحقق من الصلاحيات)
-router.get('/all', complaintController.checkUserPermissions, complaintController.getAllComplaints);
+// مسارات عامة (لا تحتاج مصادقة)
+router.get('/departments', getDepartments);
 
-// جلب شكاوى المستخدم الشخصية (للمستخدمين العاديين فقط)
-router.get('/my-complaints', complaintController.checkUserPermissions, complaintController.getUserComplaints);
+// مسارات تحتاج مصادقة
+router.use(authenticateToken);
 
-// جلب جميع الأقسام
-router.get('/departments', complaintController.getDepartments);
+// مسارات الأقسام وأسباب الشكاوى
+router.get('/departments/:departmentID/reasons', getComplaintReasons);
+router.get('/reasons/:reasonID/subtypes', getSubTypes);
 
-// جلب أنواع الشكاوى الرئيسية
-router.get('/types', complaintController.getComplaintTypes);
+// إنشاء شكوى جديدة (مع رفع الملفات)
+router.post('/create', 
+    requirePermission('complaint.create'),
+    upload.array('attachments', 5), 
+    createComplaint
+);
 
-// جلب التصنيفات الفرعية حسب النوع الرئيسي
-router.get('/subtypes/:complaintTypeID', complaintController.getSubTypes);
+// جلب جميع الشكاوى (للمدراء والمشرفين)
+router.get('/all', 
+    requireAnyRole([1, 3]), // SuperAdmin, Admin
+    getAllComplaints
+);
 
-// جلب جميع شكاوى المريض
-router.get('/patient/:nationalId', complaintController.getPatientComplaints);
+// البحث في الشكاوى
+router.get('/search', 
+    requireAnyRole([1, 3]), // SuperAdmin, Admin
+    searchComplaints
+);
 
-// التحقق من هوية المريض
-router.get('/verify-patient/:nationalId', complaintController.verifyPatientIdentity);
+// إحصائيات الشكاوى
+router.get('/stats', 
+    requireAnyRole([1, 3]), // SuperAdmin, Admin
+    getComplaintStats
+);
 
 // جلب تفاصيل شكوى محددة
-router.get('/details/:complaintId', complaintController.getComplaintDetails);
-
-// حفظ شكوى جديدة مع المرفقات
-router.post('/submit', complaintController.checkUserPermissions, complaintController.upload.array('attachments', 5), complaintController.submitComplaint);
+router.get('/:complaintID', 
+    requirePermission('complaint.view_own'), // أو complaint.view_all حسب الدور
+    getComplaintById
+);
 
 // تحديث حالة الشكوى
-router.put('/update-status/:complaintId', complaintController.updateComplaintStatus);
+router.put('/:complaintID/status', 
+    requirePermission('complaint.status'),
+    updateComplaintStatus
+);
 
-// تحويل الشكوى إلى قسم آخر
-router.put('/transfer/:complaintId', complaintController.checkUserPermissions, complaintController.transferComplaint);
+// تكليف شكوى لمستخدم
+router.post('/:complaintID/assign', 
+    requirePermission('complaint.assign'),
+    assignComplaint
+);
 
-// تحويل الشكوى إلى قسم آخر
-router.put('/transfer/:complaintId', complaintController.transferComplaint);
+// إضافة رد على الشكوى
+router.post('/:complaintID/replies', 
+    requirePermission('complaint.reply'),
+    addReply
+);
 
-module.exports = router; 
+module.exports = router;

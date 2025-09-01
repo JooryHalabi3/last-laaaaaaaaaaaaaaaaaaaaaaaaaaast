@@ -84,7 +84,7 @@ if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
 }
 
 // إعدادات API
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'http://127.0.0.1:3001/api';
 
 // متغيرات عامة للبيانات
 let chartData = {
@@ -131,7 +131,13 @@ async function loadInPersonComplaintsData() {
         console.log('📅 فلاتر التاريخ:', params.toString() || 'بدون فلاتر - جلب جميع البيانات');
         console.log('🌐 إرسال طلب إلى:', url);
 
-        const response = await fetch(url);
+        const token = localStorage.getItem('token');
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
         
         console.log('📡 استجابة الخادم:', {
             status: response.status,

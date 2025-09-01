@@ -1,30 +1,54 @@
 const express = require('express');
 const router = express.Router();
+const { authenticateToken, requireRole } = require('../middleware/auth');
+const {
+    list,
+    count,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    clearReadNotifications,
+    createNotification,
+    broadcastNotification,
+    getStats
+} = require('../controllers/notificationsController');
 
-const { authenticateToken } = require('../middleware/auth'); // << فقط authenticateToken
-const controller = require('../controllers/notificationsController');
+// تطبيق المصادقة على جميع المسارات
+router.use(authenticateToken);
 
-// حارس محلي للسوبر أدمن (RoleID=1)
-function requireSuperAdmin(req, res, next) {
-  const roleId = Number(req.user?.RoleID);
-  if (roleId !== 1) {
-    return res.status(403).json({ success: false, message: 'Forbidden: Super Admin only' });
-  }
-  next();
-}
-
-router.use(authenticateToken, requireSuperAdmin);
-
+// مسارات المستخدم العادي
 // GET /api/notifications?status=unread|read|all&limit=20
-router.get('/', controller.list);
+router.get('/', list);
 
 // GET /api/notifications/count?status=unread|read|all
-router.get('/count', controller.count);
+router.get('/count', count);
 
-// POST /api/notifications/:id/read
-router.post('/:id/read', controller.markAsRead);
+// GET /api/notifications/stats
+router.get('/stats', getStats);
 
-// POST /api/notifications/read-all
-router.post('/read-all', controller.markAllAsRead);
+// PUT /api/notifications/:id/read
+router.put('/:id/read', markAsRead);
+
+// PUT /api/notifications/mark-all-read
+router.put('/mark-all-read', markAllAsRead);
+
+// DELETE /api/notifications/:id
+router.delete('/:id', deleteNotification);
+
+// DELETE /api/notifications/clear-read
+router.delete('/clear-read', clearReadNotifications);
+
+// مسارات المدراء فقط
+// POST /api/notifications
+router.post('/', 
+    requireRole(1), // SuperAdmin only
+    createNotification
+);
+
+// POST /api/notifications/broadcast
+router.post('/broadcast', 
+    requireRole(1), // SuperAdmin only
+    broadcastNotification
+);
 
 module.exports = router;

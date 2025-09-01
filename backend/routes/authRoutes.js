@@ -4,22 +4,23 @@ const router = express.Router();
 const {
   register,
   login,
-  getCurrentUser,
-  getRoles,
-  getDepartments,
+  changePassword,
+  requestPasswordReset,
+  resetPassword,
+  getProfile,
   updateProfile
 } = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/auth');
-const authController = require('../controllers/authController');
 
-// المسارات الصحيحة
+// مسارات المصادقة العامة (لا تحتاج توكن)
 router.post('/register', register);
 router.post('/login', login);
-router.get('/me', getCurrentUser);
-router.get('/roles', getRoles);
-router.get('/departments', getDepartments);
+router.post('/forgot-password', requestPasswordReset);
+router.post('/reset-password', resetPassword);
 
-// تحديث بيانات البروفايل (يتطلب توكن صالح)
+// مسارات تحتاج مصادقة
+router.get('/profile', authenticateToken, getProfile);
 router.put('/profile', authenticateToken, updateProfile);
+router.post('/change-password', authenticateToken, changePassword);
 
-module.exports = router; 
+module.exports = router;

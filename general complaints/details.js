@@ -1,5 +1,5 @@
 // إعدادات API
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'http://127.0.0.1:3001/api';
 
 // متغيرات عامة
 let complaintData = null;
@@ -17,7 +17,7 @@ async function loadComplaintDetails() {
       console.log('لا توجد بيانات في localStorage، محاولة جلبها من API باستخدام ID:', complaintId);
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_BASE_URL}/complaints/details/${complaintId}`, {
+        const response = await fetch(`${API_BASE_URL}/complaints/${complaintId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
@@ -60,7 +60,7 @@ async function loadComplaintDetails() {
       console.log('البيانات ناقصة، محاولة جلب البيانات الكاملة من API...');
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_BASE_URL}/complaints/details/${complaintData.ComplaintID}`, {
+        const response = await fetch(`${API_BASE_URL}/complaints/${complaintData.ComplaintID}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();

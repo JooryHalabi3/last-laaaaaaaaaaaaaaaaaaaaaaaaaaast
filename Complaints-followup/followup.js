@@ -4,7 +4,7 @@ function goBack() {
 }
 
 // إعدادات API
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'http://127.0.0.1:3001/api';
 
 async function handleSubmit(e) {
   e.preventDefault();
@@ -24,33 +24,41 @@ async function handleSubmit(e) {
   submitBtn.disabled = true;
 
   try {
-    // التحقق من هوية المريض عبر API الجديد
-    const verifyResponse = await fetch(`${API_BASE_URL}/complaints/verify-patient/${id}`);
-    const verifyData = await verifyResponse.json();
+    // البحث عن المريض والشكاوى في النظام الجديد
+    const searchResponse = await fetch(`${API_BASE_URL}/complaints/search?query=${id}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    const searchData = await searchResponse.json();
 
-    if (verifyData.success) {
-      // التحقق من تطابق الاسم
-      const patientName = verifyData.data.patient.name.toLowerCase().trim();
-      const enteredName = name.toLowerCase().trim();
+    if (searchData.success && searchData.data && searchData.data.length > 0) {
+      // البحث عن مريض يطابق الاسم والهوية
+      const matchingComplaints = searchData.data.filter(complaint => {
+        const patientName = (complaint.PatientFullName || '').toLowerCase().trim();
+        const patientNationalID = complaint.PatientNationalID || '';
+        const enteredName = name.toLowerCase().trim();
+        
+        return patientNationalID === id && 
+               (patientName === enteredName || 
+                patientName.includes(enteredName) || 
+                enteredName.includes(patientName));
+      });
       
-      if (patientName === enteredName || patientName.includes(enteredName) || enteredName.includes(patientName)) {
+      if (matchingComplaints.length > 0) {
         // تخزين البيانات في localStorage
-        localStorage.setItem('patientName', verifyData.data.patient.name);
+        localStorage.setItem('patientName', matchingComplaints[0].PatientFullName);
         localStorage.setItem('patientId', id);
         localStorage.setItem('patientNationalId', id);
         
-        // التحقق من وجود شكاوى
-        if (verifyData.data.totalComplaints > 0) {
-          // الانتقال إلى صفحة الشكاوى
-          window.location.href = "/Complaints-followup/all-complaints.html";
-        } else {
-          alert("لا توجد شكاوى مسجلة لهذا المريض حتى الآن.");
-        }
+        // الانتقال إلى صفحة الشكاوى
+        window.location.href = "/Complaints-followup/all-complaints.html";
       } else {
         alert("الاسم المدخل لا يتطابق مع البيانات المسجلة. يرجى التأكد من صحة الاسم ورقم الهوية.");
       }
     } else {
-      alert("لا يوجد مريض مسجل بهذا الرقم أو البيانات غير صحيحة");
+      alert("لا توجد شكاوى مسجلة لهذا المريض أو البيانات غير صحيحة");
     }
   } catch (error) {
     console.error('خطأ في التحقق من هوية المريض:', error);

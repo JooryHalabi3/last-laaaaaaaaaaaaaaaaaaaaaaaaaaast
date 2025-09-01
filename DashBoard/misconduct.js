@@ -4,7 +4,7 @@ let dateFromPicker;
 let dateToPicker;
 
 // إعدادات API
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'http://127.0.0.1:3001/api';
 
 // متغيرات عامة
 let misconductData = {
@@ -22,7 +22,13 @@ async function loadMisconductData() {
     
     try {
         // جلب البيانات مباشرة من API
-        const response = await fetch(`${API_BASE_URL}/misconduct/stats`);
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/misconduct/stats`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
         console.log('📡 Response status:', response.status);
         
         if (!response.ok) {

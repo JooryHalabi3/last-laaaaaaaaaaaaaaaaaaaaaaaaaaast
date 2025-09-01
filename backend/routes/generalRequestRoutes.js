@@ -1,26 +1,33 @@
 const express = require('express');
 const router = express.Router();
-const generalRequestController = require('../controllers/generalRequestController');
+const { authenticateToken, requireAnyRole } = require('../middleware/auth');
+const {
+    getGeneralRequestStats,
+    exportGeneralRequestData,
+    getRequestDetails,
+    updateRequestStatus,
+    assignRequest
+} = require('../controllers/generalRequestController');
 
-// فحص البيانات الموجودة
-router.get('/check-data', generalRequestController.checkExistingData);
+// تطبيق المصادقة على جميع المسارات
+router.use(authenticateToken);
+
+// السماح للسوبر أدمن والأدمن بالوصول
+router.use(requireAnyRole([1, 3])); // SuperAdmin, Admin
 
 // جلب إحصائيات الطلبات العامة
-router.get('/stats', generalRequestController.getGeneralRequestStats);
-
-// جلب أنواع الطلبات المتاحة
-router.get('/request-types', generalRequestController.getAvailableRequestTypes);
+router.get('/stats', getGeneralRequestStats);
 
 // جلب بيانات الطلبات العامة للتصدير
-router.get('/export-data', generalRequestController.getGeneralRequestsForExport);
+router.get('/export-data', exportGeneralRequestData);
 
-// جلب التحليل والاقتراحات
-router.get('/analysis', generalRequestController.getGeneralRequestAnalysis);
-
-// إضافة طلب جديد
-router.post('/add', generalRequestController.addGeneralRequest);
+// جلب تفاصيل طلب محدد
+router.get('/details/:requestId', getRequestDetails);
 
 // تحديث حالة الطلب
-router.put('/:RequestID/status', generalRequestController.updateRequestStatus);
+router.put('/:requestId/status', updateRequestStatus);
 
-module.exports = router; 
+// تكليف طلب لمسؤول
+router.post('/:requestId/assign', assignRequest);
+
+module.exports = router;

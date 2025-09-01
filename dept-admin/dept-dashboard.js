@@ -1,5 +1,5 @@
 // Department Dashboard JavaScript
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'http://127.0.0.1:3001/api';
 
 let currentLang = localStorage.getItem('lang') || 'ar';
 let currentUser = null;
@@ -403,7 +403,7 @@ function populateEmployeeSelect(employees) {
   
   employees.forEach(employee => {
     const option = document.createElement('option');
-    option.value = employee.EmployeeID;
+    option.value = employee.UserID || employee.EmployeeID;
     option.textContent = employee.FullName;
     select.appendChild(option);
   });

@@ -1,28 +1,48 @@
 // routes/userManagementRoutes.js
 const express = require('express');
 const router = express.Router();
+const { authenticateToken, requireRole } = require('../middleware/auth');
+const {
+    listUsers,
+    createUser,
+    updateUser,
+    deleteUser,
+    getUserById,
+    changeUserPassword,
+    getRoles,
+    getDepartments,
+    getUserStats
+} = require('../controllers/userManagementController');
 
-const controller = require('../controllers/userManagementController');
-const { authenticateToken } = require('../middleware/auth');
+// تطبيق المصادقة والصلاحية (SuperAdmin فقط) على جميع المسارات
+router.use(authenticateToken);
+router.use(requireRole(1)); // SuperAdmin only
 
-// قائمة المستخدمين (مع ترقيم صفحات) => يطابق طلب الواجهة /api/users?page=&limit=
-router.get('/', authenticateToken, controller.listUsers);
+// قائمة المستخدمين مع البحث والفلترة
+router.get('/', listUsers);
 
-// إحصائيات مبسطة للواجهة (عدد الكل/حسب الأدوار)
-router.get('/stats', authenticateToken, controller.getStats);
+// إحصائيات المستخدمين
+router.get('/stats', getUserStats);
+
+// جلب الأدوار المتاحة
+router.get('/roles', getRoles);
+
+// جلب الأقسام المتاحة
+router.get('/departments', getDepartments);
+
+// إنشاء مستخدم جديد
+router.post('/', createUser);
+
+// جلب تفاصيل مستخدم محدد
+router.get('/:id', getUserById);
 
 // تحديث بيانات المستخدم
-router.put('/:id', authenticateToken, controller.updateUser);
+router.put('/:id', updateUser);
 
-// تحديث دور المستخدم
-router.put('/:id/role', authenticateToken, controller.updateUserRole);
+// تغيير كلمة مرور المستخدم
+router.put('/:id/password', changeUserPassword);
 
-// حذف مستخدم
-router.delete('/:id', authenticateToken, controller.deleteUser);
-
-// سويتش يوزر (Impersonate)
-router.post('/:id/impersonate', authenticateToken, controller.impersonateUser);
-// إنهاء السويتش يوزر
-router.post('/impersonate/end', authenticateToken, controller.endImpersonation);
+// حذف مستخدم (تعطيل)
+router.delete('/:id', deleteUser);
 
 module.exports = router;
