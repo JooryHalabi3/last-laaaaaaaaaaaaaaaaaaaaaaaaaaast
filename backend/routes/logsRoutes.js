@@ -1,34 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const { authenticateToken, requirePermission } = require('../middleware/auth');
-const {
-    getActivityLogs,
-    getActivityStats,
-    getActivityTypes,
-    cleanupOldLogs,
-    exportLogs
-} = require('../controllers/logsController');
+const logsController = require('../controllers/logsController');
 
-// تطبيق المصادقة والصلاحيات على جميع المسارات
-router.use(authenticateToken);
-router.use(requirePermission('logs.view'));
+// تطبيق middleware للتحقق من الصلاحيات على جميع routes
+router.use(logsController.checkUserPermissions);
+router.use(logsController.checkAdminPermissions);
 
-// جلب سجلات النشاط مع الفلاتر والتصفح
-router.get('/', getActivityLogs);
+// جلب جميع السجلات مع الفلاتر والتصفح
+router.get('/', logsController.getAllLogs);
 
-// جلب إحصائيات النشاط
-router.get('/stats', getActivityStats);
+// تصدير السجلات
+router.get('/export', logsController.exportLogs);
 
-// جلب أنواع الأنشطة المتاحة
-router.get('/types', getActivityTypes);
+// حذف السجلات القديمة
+router.delete('/old', logsController.deleteOldLogs);
 
-// تصدير سجلات النشاط
-router.get('/export', exportLogs);
+// حذف سجل محدد
+router.delete('/:logId', logsController.deleteLog);
 
-// تنظيف السجلات القديمة (SuperAdmin فقط)
-router.delete('/cleanup', 
-    requirePermission('logs.manage'), 
-    cleanupOldLogs
-);
-
-module.exports = router;
+module.exports = router; 

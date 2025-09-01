@@ -18,10 +18,10 @@ router.get('/summary', async (req, res) => {
     const [[totals]] = await pool.execute(`
       SELECT
         COUNT(*) AS total,
-        SUM(CASE WHEN Status = 'open' THEN 1 ELSE 0 END) AS open,
-        SUM(CASE WHEN Status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
-        SUM(CASE WHEN Status = 'closed' THEN 1 ELSE 0 END) AS closed
-      FROM complaints
+        SUM(CASE WHEN CurrentStatus = 'جديدة' THEN 1 ELSE 0 END) AS open,
+        SUM(CASE WHEN CurrentStatus IN ('قيد المعالجة','قيد المراجعة') THEN 1 ELSE 0 END) AS in_progress,
+        SUM(CASE WHEN CurrentStatus IN ('مغلقة','تم الحل') THEN 1 ELSE 0 END) AS closed
+      FROM Complaints
     `);
     res.json({ totals }); // شكل مختلف عمداً للسوبر أدمن
   } catch (e) {
@@ -35,24 +35,22 @@ router.get('/superadmin', async (req, res) => {
     const [[totals]] = await pool.execute(`
       SELECT
         COUNT(*) AS total,
-        SUM(CASE WHEN Status = 'open' THEN 1 ELSE 0 END) AS open,
-        SUM(CASE WHEN Status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
-        SUM(CASE WHEN Status = 'closed' THEN 1 ELSE 0 END) AS closed
-      FROM complaints
+        SUM(CASE WHEN CurrentStatus = 'جديدة' THEN 1 ELSE 0 END) AS open,
+        SUM(CASE WHEN CurrentStatus IN ('قيد المعالجة','قيد المراجعة') THEN 1 ELSE 0 END) AS in_progress,
+        SUM(CASE WHEN CurrentStatus IN ('مغلقة','تم الحل') THEN 1 ELSE 0 END) AS closed
+      FROM Complaints
     `);
 
     const [latestLogs] = await pool.execute(`
-      SELECT al.CreatedAt, u.Username, al.Action as ActivityType, 
-             JSON_UNQUOTE(JSON_EXTRACT(al.Details, '$.description')) as Description
-      FROM activitylogs al
-      LEFT JOIN users u ON al.ActorUserID = u.UserID
-      ORDER BY al.CreatedAt DESC
+      SELECT CreatedAt, Username, ActivityType, Description
+      FROM ActivityLogs
+      ORDER BY CreatedAt DESC
       LIMIT 10
     `);
 
     const [[logsToday]] = await pool.execute(`
       SELECT COUNT(*) AS c
-      FROM activitylogs
+      FROM ActivityLogs
       WHERE DATE(CreatedAt) = CURDATE()
     `);
 

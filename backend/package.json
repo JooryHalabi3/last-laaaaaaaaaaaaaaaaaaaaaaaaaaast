@@ -1,18 +1,16 @@
 {
-  "name": "aounak-backend",
-  "version": "2.0.0",
-  "description": "Hospital Complaints Management System Backend - عُــــــونَك",
+  "name": "backend",
+  "version": "1.0.0",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "db:check": "node scripts/check-database.js",
-    "db:seed": "node scripts/seed-database.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["hospital", "complaints", "management", "nodejs", "mysql"],
-  "author": "Hospital IT Team",
-  "license": "MIT",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",

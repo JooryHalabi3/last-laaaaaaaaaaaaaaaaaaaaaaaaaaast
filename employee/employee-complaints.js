@@ -12,7 +12,7 @@ let currentSort = 'newest';
 let selectedComplaint = null;
 
 // API Base URL
-const API_BASE_URL = 'http://127.0.0.1:3001/api';
+const API_BASE_URL = 'http://localhost:3000/api';
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', function() {
@@ -67,11 +67,10 @@ async function checkAuthentication() {
 
 async function loadUserData() {
     try {
-        const token = localStorage.getItem('token');
         const response = await fetch(`${API_BASE_URL}/employee/profile`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}`,
+                'Authorization': `Bearer ${currentUser.token}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -80,15 +79,11 @@ async function loadUserData() {
             throw new Error('Failed to load user data');
         }
 
-        const data = await response.json();
+        const userData = await response.json();
         
-        if (data.success && data.data) {
-            // Update UI with user data
-            document.getElementById('userName').textContent = data.data.FullName || currentUser.Username;
-            document.getElementById('userAvatar').src = '../icon/person.png';
-        } else {
-            throw new Error('Invalid response format');
-        }
+        // Update UI with user data
+        document.getElementById('userName').textContent = userData.FullName || currentUser.Username;
+        document.getElementById('userAvatar').src = '../icon/person.png';
         
     } catch (error) {
         console.error('Error loading user data:', error);
@@ -108,11 +103,10 @@ async function loadAssignedComplaints() {
             sort: currentSort
         });
 
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_BASE_URL}/employee/complaints?${params}`, {
+        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints?${params}`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}`,
+                'Authorization': `Bearer ${currentUser.token}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -122,8 +116,8 @@ async function loadAssignedComplaints() {
         }
 
         const data = await response.json();
-        assignedComplaints = data.success ? data.data || [] : [];
-        totalPages = data.pagination ? data.pagination.totalPages || 1 : 1;
+        assignedComplaints = data.complaints || [];
+        totalPages = data.totalPages || 1;
         
         displayComplaints(assignedComplaints);
         updatePagination();
@@ -168,7 +162,7 @@ function displayComplaints(complaints) {
                 </div>
             </div>
             <div class="complaint-details">
-                ${(complaint.Description || complaint.Title || '').substring(0, 200)}${(complaint.Description || complaint.Title || '').length > 200 ? '...' : ''}
+                ${complaint.ComplaintDetails.substring(0, 200)}${complaint.ComplaintDetails.length > 200 ? '...' : ''}
             </div>
             <div class="complaint-footer">
                 <div class="complaint-meta">
@@ -207,11 +201,10 @@ function getStatusClass(status) {
 
 async function loadStatistics() {
     try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_BASE_URL}/employee/stats`, {
+        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints/stats`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}`,
+                'Authorization': `Bearer ${currentUser.token}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -220,18 +213,13 @@ async function loadStatistics() {
             throw new Error('Failed to load statistics');
         }
 
-        const data = await response.json();
+        const stats = await response.json();
         
-        if (data.success && data.data) {
-            const stats = data.data;
-            // Update statistics
-            document.getElementById('totalCount').textContent = (stats.created.total + stats.assigned.total) || 0;
-            document.getElementById('pendingCount').textContent = (stats.created.open + stats.assigned.open) || 0;
-            document.getElementById('completedCount').textContent = stats.closed_total || 0;
-            document.getElementById('urgentCount').textContent = 0; // يمكن إضافة إحصائية للأولوية العالية لاحقاً
-        } else {
-            throw new Error('Invalid response format');
-        }
+        // Update statistics
+        document.getElementById('totalCount').textContent = stats.total || 0;
+        document.getElementById('pendingCount').textContent = stats.pending || 0;
+        document.getElementById('completedCount').textContent = stats.completed || 0;
+        document.getElementById('urgentCount').textContent = stats.urgent || 0;
         
     } catch (error) {
         console.error('Error loading statistics:', error);
@@ -350,11 +338,10 @@ function viewComplaintDetails(complaintId) {
 async function displayComplaintDetails(complaint) {
     try {
         // Load full complaint details including responses
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_BASE_URL}/employee/complaints/${complaint.ComplaintID}`, {
+        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints/${complaint.ComplaintID}`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}`,
+                'Authorization': `Bearer ${currentUser.token}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -364,27 +351,23 @@ async function displayComplaintDetails(complaint) {
         }
 
         const data = await response.json();
-        const fullComplaint = data.success ? data.data : complaint;
-        const responses = fullComplaint.replies || [];
-        const attachments = fullComplaint.attachments || [];
+        const fullComplaint = data.complaint;
+        const responses = data.responses || [];
         
         const detailsHTML = `
             <div class="complaint-detail-item">
                 <h4>معلومات الشكوى</h4>
-                <p><strong>رقم الشكوى:</strong> ${fullComplaint.ComplaintNumber || fullComplaint.ComplaintID}</p>
-                <p><strong>العنوان:</strong> ${fullComplaint.Title}</p>
-                <p><strong>التاريخ:</strong> ${formatDate(fullComplaint.CreatedAt)}</p>
-                <p><strong>الحالة:</strong> ${getStatusText(fullComplaint.Status)}</p>
-                <p><strong>الأولوية:</strong> ${getPriorityText(fullComplaint.Priority)}</p>
-                <p><strong>المصدر:</strong> ${getSourceText(fullComplaint.Source)}</p>
+                <p><strong>رقم الشكوى:</strong> ${fullComplaint.ComplaintID}</p>
+                <p><strong>التاريخ:</strong> ${formatDate(fullComplaint.ComplaintDate)}</p>
+                <p><strong>الحالة:</strong> ${fullComplaint.CurrentStatus}</p>
+                <p><strong>الأولوية:</strong> ${fullComplaint.Priority}</p>
                 <p><strong>القسم:</strong> ${fullComplaint.DepartmentName || 'غير محدد'}</p>
-                <p><strong>النوع:</strong> ${fullComplaint.ReasonName || 'غير محدد'}</p>
-                <p><strong>النوع الفرعي:</strong> ${fullComplaint.SubtypeName || 'غير محدد'}</p>
+                <p><strong>النوع:</strong> ${fullComplaint.ComplaintTypeName || 'غير محدد'}</p>
             </div>
             
             <div class="complaint-detail-item">
                 <h4>تفاصيل الشكوى</h4>
-                <p>${fullComplaint.Description || fullComplaint.Title || 'لا توجد تفاصيل'}</p>
+                <p>${fullComplaint.ComplaintDetails}</p>
             </div>
             
             <div class="complaint-detail-item">
@@ -446,14 +429,15 @@ async function submitResponse() {
     try {
         showLoading();
         
-        const response = await fetch(`${API_BASE_URL}/employee/complaints/${selectedComplaint.ComplaintID}/replies`, {
+        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints/${selectedComplaint.ComplaintID}/respond`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Authorization': `Bearer ${currentUser.token}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                body: responseText
+                responseText,
+                responseType
             })
         });
 
@@ -505,10 +489,10 @@ async function updateStatus() {
     try {
         showLoading();
         
-        const response = await fetch(`${API_BASE_URL}/employee/complaints/${selectedComplaint.ComplaintID}/status`, {
+        const response = await fetch(`${API_BASE_URL}/employee/assigned-complaints/${selectedComplaint.ComplaintID}/status`, {
             method: 'PUT',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Authorization': `Bearer ${currentUser.token}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
@@ -670,45 +654,4 @@ function showSuccess(message) {
     setTimeout(() => {
         successDiv.remove();
     }, 3000);
-}
-
-// دوال مساعدة للتوافق مع API الجديد
-function getStatusText(status) {
-    const statusMap = {
-        'open': 'مفتوحة',
-        'in_progress': 'قيد المعالجة',
-        'responded': 'تم الرد',
-        'closed': 'مغلقة'
-    };
-    return statusMap[status] || status;
-}
-
-function getPriorityText(priority) {
-    const priorityMap = {
-        'low': 'منخفضة',
-        'normal': 'عادية',
-        'high': 'عالية',
-        'urgent': 'عاجلة'
-    };
-    return priorityMap[priority] || priority;
-}
-
-function getSourceText(source) {
-    const sourceMap = {
-        'in_person': 'شخصياً',
-        'call_center': 'مركز الاتصال'
-    };
-    return sourceMap[source] || source;
-}
-
-function formatDate(dateString) {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ar-SA', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
 }

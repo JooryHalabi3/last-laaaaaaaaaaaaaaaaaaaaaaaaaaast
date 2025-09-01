@@ -1,67 +1,23 @@
 const express = require('express');
 const router = express.Router();
-const { authenticateToken, requirePermission } = require('../middleware/auth');
-const {
-    addResponse,
-    getComplaintResponses,
-    updateComplaintStatus,
-    getComplaintHistory,
-    getAvailableStatuses,
-    getResponseTypes,
-    updateResponse,
-    deleteResponse,
-    getResponseStats
-} = require('../controllers/responseController');
-
-// تطبيق المصادقة على جميع المسارات
-router.use(authenticateToken);
+const responseController = require('../controllers/responseController');
 
 // إضافة رد على شكوى
-router.post('/add', 
-    requirePermission('complaint.reply'),
-    addResponse
-);
+router.post('/add', responseController.addResponse);
 
 // جلب جميع الردود لشكوى محددة
-router.get('/responses/:complaintId', 
-    requirePermission('complaint.view_own'), // أو complaint.view_all حسب الدور
-    getComplaintResponses
-);
+router.get('/responses/:complaintId', responseController.getComplaintResponses);
 
 // تغيير حالة الشكوى
-router.put('/status/:complaintId', 
-    requirePermission('complaint.status'),
-    updateComplaintStatus
-);
+router.put('/status/:complaintId', responseController.updateComplaintStatus);
 
 // جلب سجل التاريخ لشكوى محددة
-router.get('/history/:complaintId', 
-    requirePermission('complaint.view_own'),
-    getComplaintHistory
-);
+router.get('/history/:complaintId', responseController.getComplaintHistory);
 
-// جلب الحالات المتاحة (عام - لا يحتاج صلاحيات خاصة)
-router.get('/statuses', getAvailableStatuses);
+// جلب الحالات المتاحة
+router.get('/statuses', responseController.getAvailableStatuses);
 
-// جلب أنواع الردود المتاحة (عام - لا يحتاج صلاحيات خاصة)
-router.get('/response-types', getResponseTypes);
+// جلب أنواع الردود المتاحة
+router.get('/response-types', responseController.getResponseTypes);
 
-// تحديث رد موجود
-router.put('/responses/:responseId', 
-    requirePermission('complaint.reply'),
-    updateResponse
-);
-
-// حذف رد
-router.delete('/responses/:responseId', 
-    requirePermission('complaint.reply'),
-    deleteResponse
-);
-
-// جلب إحصائيات الردود (للمدراء)
-router.get('/stats', 
-    requirePermission('complaint.view_all'),
-    getResponseStats
-);
-
-module.exports = router;
+module.exports = router; 

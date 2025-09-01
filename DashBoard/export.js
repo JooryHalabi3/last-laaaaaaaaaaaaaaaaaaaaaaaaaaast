@@ -77,13 +77,7 @@ async function loadReportStats() {
       includeEmployeeData: includeEmployeeData.toString()
     });
 
-    const token = localStorage.getItem('token');
-    const response = await fetch(`http://127.0.0.1:3001/api/reports/stats?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await fetch(`http://localhost:3001/api/reports/stats?${params}`);
     const result = await response.json();
 
     if (result.success) {
@@ -214,13 +208,7 @@ async function exportReport() {
       dataTypes: reportSettings.dataTypes.join(',')
     });
 
-    const token = localStorage.getItem('token');
-    const response = await fetch(`http://127.0.0.1:3001/api/reports/export-data?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await fetch(`http://localhost:3001/api/reports/export-data?${params}`);
     const result = await response.json();
 
     // جلب التحليل والاقتراحات إذا كانت مطلوبة
@@ -231,13 +219,7 @@ async function exportReport() {
         toDate: reportSettings.toDate
       });
       
-      const token = localStorage.getItem('token');
-      const analysisResponse = await fetch(`http://127.0.0.1:3001/api/reports/export-data?${analysisParams}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const analysisResponse = await fetch(`http://localhost:3001/api/reports/analysis?${analysisParams}`);
       const analysisResult = await analysisResponse.json();
       
       if (analysisResult.success) {

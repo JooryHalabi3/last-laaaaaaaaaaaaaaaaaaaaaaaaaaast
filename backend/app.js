@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
-const { authenticateToken, requireRole } = require('./middleware/auth');
+const { authenticateToken } = require('./middleware/auth');
+const { requireRole } = require('./middleware/requireRole');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -120,11 +121,43 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3001;
 
-// دالة للتحقق من قاعدة البيانات الجديدة
+// دالة لإنشاء جدول الصلاحيات
+async function setupPermissionsTable() {
+    try {
+        console.log('🔧 التحقق من وجود جدول RolePermissions...');
+        
+        // إنشاء جدول الصلاحيات
+        const createTableQuery = `
+            CREATE TABLE IF NOT EXISTS RolePermissions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                role_name VARCHAR(50) NOT NULL,
+                permission_name VARCHAR(100) NOT NULL,
+                has_permission TINYINT(1) DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_role_permission (role_name, permission_name)
+            )
+        `;
+        
+        await db.execute(createTableQuery);
+        console.log('✅ جدول RolePermissions جاهز');
+        
+        // إعداد الصلاحيات الافتراضية باستخدام النظام الجديد
+        const { setupDefaultPermissions } = require('./middleware/rolePermissions');
+        await setupDefaultPermissions();
+        
+    } catch (error) {
+        console.error('❌ خطأ في إعداد جدول الصلاحيات:', error);
+    }
+}
+
 app.listen(PORT, async () => {
     console.log(`Server is running on port ${PORT}`);
     console.log(`Health check: http://localhost:${PORT}/health`);
     
+    // إعداد جدول الصلاحيات عند بدء الخادم
+    await setupPermissionsTable();
+    await setupEmployeesTable();
 }); 
 // Import routes
 module.exports = app;

@@ -1,34 +1,17 @@
 // routes/departmentComplaintsRoutes.js
 const express = require('express');
 const router = express.Router();
-const { authenticateToken, requireAnyRole } = require('../middleware/auth');
-const {
-    getComplaintsByDepartment,
-    getDepartmentStats,
-    assignComplaint,
-    updateComplaintStatus,
-    getDepartmentEmployees
-} = require('../controllers/departmentComplaintsController');
+const { authenticateToken } = require('../middleware/auth');
+const { getMyDepartmentComplaints } = require('../controllers/departmentComplaintsController');
 
-// تطبيق المصادقة على جميع المسارات
-router.use(authenticateToken);
-
-// السماح للسوبر أدمن (1) والأدمن (3)
-router.use(requireAnyRole([1, 3]));
+// سماح للسوبر أدمن (1) والأدمن (3)
+function allowAdminAndSuper(req, res, next) {
+  const roleId = Number(req.user?.RoleID || req.user?.role || req.user?.roleId);
+  if ([1, 3].includes(roleId)) return next();
+  return res.status(403).json({ success: false, message: 'Forbidden: role not allowed' });
+}
 
 // GET /api/department-complaints/by-department
-router.get('/by-department', getComplaintsByDepartment);
-
-// GET /api/department-complaints/stats
-router.get('/stats', getDepartmentStats);
-
-// GET /api/department-complaints/employees
-router.get('/employees', getDepartmentEmployees);
-
-// POST /api/department-complaints/assign
-router.post('/assign', assignComplaint);
-
-// PUT /api/department-complaints/:complaintID/status
-router.put('/:complaintID/status', updateComplaintStatus);
+router.get('/by-department', authenticateToken, allowAdminAndSuper, getMyDepartmentComplaints);
 
 module.exports = router;

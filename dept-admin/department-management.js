@@ -1,5 +1,5 @@
 // Department Management JavaScript
-const API_BASE_URL = 'http://127.0.0.1:3001/api';
+const API_BASE_URL = 'http://localhost:3001/api';
 
 let currentLang = localStorage.getItem('lang') || 'ar';
 let currentUser = null;
@@ -196,7 +196,7 @@ function displayEmployees() {
           ${employee.Specialty ? `• ${escapeHtml(employee.Specialty)}` : ''}
         </div>
       </td>
-      <td>${escapeHtml(employee.UserID || employee.EmployeeID || '-')}</td>
+      <td>${escapeHtml(employee.EmployeeID || '-')}</td>
       <td>${escapeHtml(employee.Email || '-')}</td>
       <td>
         <span class="role-badge role-${getRoleClass(employee.RoleID)}">
@@ -218,7 +218,7 @@ function generateActionButtons(employee) {
   let buttons = '';
   
   // Can't delete self
-  if (Number(employee.UserID || employee.EmployeeID) === Number(currentUser.UserID || currentUser.EmployeeID)) {
+  if (Number(employee.EmployeeID) === Number(currentUser.EmployeeID)) {
     buttons += `
       <span class="btn btn-sm btn-secondary" style="opacity: 0.5;">
         <i class="fas fa-user-shield"></i>
@@ -228,7 +228,7 @@ function generateActionButtons(employee) {
   } else {
     // Delete request button (only for same department)
     buttons += `
-              <button class="btn btn-sm btn-danger" onclick="openDeleteModal(${employee.UserID || employee.EmployeeID}, '${escapeHtml(employee.FullName)}')">
+      <button class="btn btn-sm btn-danger" onclick="openDeleteModal(${employee.EmployeeID}, '${escapeHtml(employee.FullName)}')">
         <i class="fas fa-trash"></i>
         طلب حذف
       </button>
@@ -237,7 +237,7 @@ function generateActionButtons(employee) {
   
   // Edit permissions button
   buttons += `
-    <button class="btn btn-sm btn-primary" onclick="editPermissions(${employee.UserID || employee.EmployeeID})">
+    <button class="btn btn-sm btn-primary" onclick="editPermissions(${employee.EmployeeID})">
       <i class="fas fa-key"></i>
       الصلاحيات
     </button>
@@ -245,7 +245,7 @@ function generateActionButtons(employee) {
   
   // View activity button
   buttons += `
-    <button class="btn btn-sm btn-warning" onclick="viewActivity(${employee.UserID || employee.EmployeeID})">
+    <button class="btn btn-sm btn-warning" onclick="viewActivity(${employee.EmployeeID})">
       <i class="fas fa-chart-line"></i>
       النشاط
     </button>

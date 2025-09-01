@@ -1,5 +1,5 @@
 // إعدادات API
-const API_BASE_URL = 'http://127.0.0.1:3001/api';
+const API_BASE_URL = 'http://localhost:3001/api';
 
 // متغيرات عامة
 let currentComplaint = null;
@@ -23,10 +23,7 @@ async function loadComplaintData() {
 
     // تحميل أنواع الردود
     console.log('بدء تحميل أنواع الردود...'); // إضافة رسالة تصحيح
-    const token = localStorage.getItem('token');
-    const responseTypesResponse = await fetch(`${API_BASE_URL}/responses/response-types`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const responseTypesResponse = await fetch(`${API_BASE_URL}/responses/response-types`);
     const responseTypesData = await responseTypesResponse.json();
     
     if (responseTypesData.success) {
@@ -37,9 +34,7 @@ async function loadComplaintData() {
 
     // تحميل الحالات المتاحة
     console.log('بدء تحميل الحالات المتاحة...'); // إضافة رسالة تصحيح
-    const statusesResponse = await fetch(`${API_BASE_URL}/responses/statuses`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const statusesResponse = await fetch(`${API_BASE_URL}/responses/statuses`);
     const statusesData = await statusesResponse.json();
     
     if (statusesData.success) {
@@ -155,10 +150,7 @@ async function loadPreviousResponses() {
   try {
     console.log('جلب الردود السابقة للشكوى:', currentComplaint.ComplaintID); // إضافة رسالة تصحيح
     
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/responses/responses/${currentComplaint.ComplaintID}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const response = await fetch(`${API_BASE_URL}/responses/responses/${currentComplaint.ComplaintID}`);
     const data = await response.json();
     
     console.log('استجابة الردود السابقة:', data); // إضافة رسالة تصحيح
@@ -249,17 +241,16 @@ async function addResponse() {
     // إضافة الرد
     const responseData = {
       complaintId: currentComplaint.ComplaintID,
-      body: responseText,
-      responseType: responseType
+      responseText: responseText,
+      responseType: responseType,
+      employeeId: 1 // سيتم تحديثه لاحقاً حسب المستخدم المسجل دخوله
     };
 
     console.log('إرسال بيانات الرد:', responseData); // إضافة رسالة تصحيح
 
-    const token = localStorage.getItem('token');
     const response = await fetch(`${API_BASE_URL}/responses/add`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(responseData)

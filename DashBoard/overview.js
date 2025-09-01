@@ -6,7 +6,7 @@ let currentLang = localStorage.getItem('lang') || 'ar';
 let topComplaintsChart;
 
 // API
-const API_BASE_URL = 'http://127.0.0.1:3001/api';
+const API_BASE_URL = 'http://localhost:3001/api';
 
 // Global state
 let overviewData = {

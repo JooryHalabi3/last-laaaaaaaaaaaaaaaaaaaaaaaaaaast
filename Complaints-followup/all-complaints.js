@@ -1,5 +1,5 @@
 // إعدادات API
-const API_BASE_URL = 'http://127.0.0.1:3001/api';
+const API_BASE_URL = 'http://localhost:3001/api';
 
 // التحقق من تسجيل الدخول
 function checkAuthentication() {
@@ -110,34 +110,24 @@ async function loadPatientComplaints() {
         return;
       }
       
-      url = `${API_BASE_URL}/complaints/search?query=${nationalId}`;
+      url = `${API_BASE_URL}/complaints/patient/${nationalId}`;
     }
 
     const response = await fetch(url, { headers });
     const data = await response.json();
     
-    if (data.success && data.data) {
-      complaintsData = Array.isArray(data.data) ? data.data : [];
-      
-      // تحديد معلومات المريض حسب نوع الطلب
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      if (user.RoleID === 1 || user.username === 'admin') {
-        // المدير: عرض جميع الشكاوى
-        patientData = { FullName: 'جميع المرضى', NationalID: 'المدير' };
+    if (data.success) {
+      // تحديد نوع البيانات حسب الاستجابة
+      if (data.data && data.data.patient) {
+        // استجابة شكاوى مريض محدد
+        patientData = data.data.patient;
+        complaintsData = data.data.complaints;
+        updatePatientInfo();
+      } else if (Array.isArray(data.data)) {
+        // استجابة جميع الشكاوي (للمدير)
+        patientData = { name: 'جميع المرضى', nationalId: 'المدير' };
+        complaintsData = data.data;
         updatePatientInfoForAdmin();
-      } else {
-        // المستخدم العادي: عرض شكاوى المريض المحدد
-        if (complaintsData.length > 0) {
-          patientData = {
-            FullName: complaintsData[0].PatientFullName || localStorage.getItem('patientName'),
-            NationalID: complaintsData[0].PatientNationalID || localStorage.getItem('patientNationalId')
-          };
-          updatePatientInfo();
-        } else {
-          alert("لا توجد شكاوى لهذا المريض");
-          window.location.href = "/Complaints-followup/followup.html";
-          return;
-        }
       }
       
       // تحديث قائمة الشكاوى
@@ -173,13 +163,13 @@ function updatePatientInfo() {
   // تحديث اسم المريض
   const patientNameElement = document.getElementById('patientName');
   if (patientNameElement) {
-    patientNameElement.textContent = patientData.FullName || patientData.name;
+    patientNameElement.textContent = patientData.name;
   }
 
   // تحديث رقم الملف (رقم الهوية)
   const fileNumberElement = document.getElementById('patientId');
   if (fileNumberElement) {
-    fileNumberElement.textContent = patientData.NationalID || patientData.nationalId;
+    fileNumberElement.textContent = patientData.nationalId;
   }
 
   // تحديث عدد الشكاوى
@@ -210,11 +200,11 @@ function updateComplaintsTable() {
   complaintsData.forEach(complaint => {
     const row = document.createElement('tr');
     
-    // تنسيق رقم الشكوى
-    const complaintNumber = complaint.ComplaintNumber || String(complaint.ComplaintID).padStart(6, '0');
+    // تنسيق رقم الشكوى مع padding
+    const complaintNumber = String(complaint.ComplaintID).padStart(6, '0');
     
     // تنسيق التاريخ والوقت
-    const complaintDate = new Date(complaint.CreatedAt || complaint.ComplaintDate);
+    const complaintDate = new Date(complaint.ComplaintDate);
     const formattedDate = complaintDate.toLocaleDateString('ar-SA', {
       year: 'numeric',
       month: '2-digit',
@@ -228,13 +218,13 @@ function updateComplaintsTable() {
     const fullDateTime = `${formattedDate}<br><small style="color: #666;">${formattedTime}</small>`;
     
     // تنسيق حالة الشكوى
-    const statusClass = getStatusClass(complaint.Status || complaint.CurrentStatus);
-    const statusText = getStatusText(complaint.Status || complaint.CurrentStatus);
+    const statusClass = getStatusClass(complaint.CurrentStatus);
+    const statusText = getStatusText(complaint.CurrentStatus);
     
     row.innerHTML = `
       <td><strong>#${complaintNumber}</strong></td>
-      <td>${complaint.ReasonName || complaint.ComplaintTypeName || 'غير محدد'}</td>
-      <td>${complaint.DepartmentName || 'غير محدد'}</td>
+      <td>${complaint.ComplaintTypeName}</td>
+      <td>${complaint.DepartmentName}</td>
       <td>${fullDateTime}</td>
       <td><span class="status-tag ${statusClass}" data-ar="${statusText}" data-en="${statusText}">${statusText}</span></td>
       <td>
@@ -249,17 +239,11 @@ function updateComplaintsTable() {
 // الحصول على كلاس CSS للحالة
 function getStatusClass(status) {
   switch (status) {
-    case 'open':
     case 'جديدة':
       return 'status-new';
-    case 'in_progress':
     case 'قيد المراجعة':
     case 'قيد المعالجة':
       return 'status-under-review';
-    case 'responded':
-    case 'تم الرد':
-      return 'status-responded';
-    case 'closed':
     case 'مغلقة':
     case 'تم الحل':
       return 'status-closed';
@@ -270,13 +254,7 @@ function getStatusClass(status) {
 
 // الحصول على نص الحالة
 function getStatusText(status) {
-  const statusMap = {
-    'open': 'مفتوحة',
-    'in_progress': 'قيد المعالجة',
-    'responded': 'تم الرد',
-    'closed': 'مغلقة'
-  };
-  return statusMap[status] || status || 'مفتوحة';
+  return status || 'جديدة';
 }
 
 // عرض تفاصيل الشكوى

@@ -29,13 +29,7 @@
             try {
                 console.log('🔄 جلب أنواع الطلبات المتاحة من قاعدة البيانات...');
                 
-                const token = localStorage.getItem('token');
-                const response = await fetch('http://127.0.0.1:3001/api/general-requests/stats', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
+                const response = await fetch('http://localhost:3001/api/general-requests/request-types');
                 const result = await response.json();
 
                 if (result.success) {
@@ -148,15 +142,9 @@
                 }
                 
                 // جلب جميع البيانات بدون فلترة تاريخ افتراضية
-                console.log('🌐 إرسال طلب إلى:', 'http://127.0.0.1:3001/api/general-requests/stats');
+                console.log('🌐 إرسال طلب إلى:', 'http://localhost:3001/api/general-requests/stats');
 
-                const token = localStorage.getItem('token');
-                const response = await fetch('http://127.0.0.1:3001/api/general-requests/stats', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
+                const response = await fetch('http://localhost:3001/api/general-requests/stats');
                 const result = await response.json();
 
                 console.log('📊 استجابة الباك إند:', result);
@@ -442,9 +430,9 @@
                     includeEmployeeData: 'true'
                 });
 
-                console.log('🌐 إرسال طلب تصدير إلى:', `http://127.0.0.1:3001/api/general-requests/export-data?${params}`);
+                console.log('🌐 إرسال طلب تصدير إلى:', `http://localhost:3001/api/general-requests/export-data?${params}`);
 
-                const response = await fetch(`http://127.0.0.1:3001/api/general-requests/export-data?${params}`);
+                const response = await fetch(`http://localhost:3001/api/general-requests/export-data?${params}`);
                 const result = await response.json();
 
                 console.log('📊 استجابة تصدير البيانات:', result);
@@ -503,7 +491,7 @@
             try {
                 console.log('🔍 فحص البيانات الموجودة في قاعدة البيانات...');
                 
-                const response = await fetch('http://127.0.0.1:3001/api/general-requests/check-data');
+                const response = await fetch('http://localhost:3001/api/general-requests/check-data');
                 const result = await response.json();
                 
                 if (result.success) {
@@ -826,7 +814,7 @@
                 const requestDetails = document.getElementById('requestDetails').value;
                 
                 try {
-                    const response = await fetch('http://127.0.0.1:3001/api/general-requests/add', {
+                    const response = await fetch('http://localhost:3001/api/general-requests/add', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
